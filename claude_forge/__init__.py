@@ -2,7 +2,7 @@
 import io
 import sys
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Windows cp1254 encoding sorununu coz
 # stdout'u UTF-8 ile sar
