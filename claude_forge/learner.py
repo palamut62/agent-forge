@@ -28,7 +28,9 @@ def save_lessons(lessons: list[dict]) -> None:
     )
 
 
-def add_lesson(category: str, mistake: str, fix: str, rule: str) -> None:
+def add_lesson(
+    category: str, mistake: str, fix: str, rule: str, project_type: str = ""
+) -> None:
     """Add a new lesson learned."""
     lessons = load_lessons()
     lesson = {
@@ -38,6 +40,7 @@ def add_lesson(category: str, mistake: str, fix: str, rule: str) -> None:
         "mistake": mistake,
         "fix": fix,
         "rule": rule,
+        "project_type": project_type,
         "applied_count": 0,
     }
     lessons.append(lesson)
@@ -64,11 +67,17 @@ def list_lessons(category: str | None = None) -> None:
         )
 
 
-def apply_lessons_to_project(project_path: str) -> int:
+def apply_lessons_to_project(project_path: str, project_type: str = "") -> int:
     """Apply learned lessons as rules to a project."""
     lessons = load_lessons()
     if not lessons:
         return 0
+
+    if project_type:
+        lessons = [
+            l for l in lessons
+            if not l.get("project_type") or l["project_type"] == project_type
+        ]
 
     path = Path(project_path)
     rules_dir = path / ".claude" / "rules"
@@ -110,12 +119,13 @@ def interactive_learn() -> None:
     categories = ["code-quality", "git", "security", "testing", "deployment", "performance", "other"]
     console.print("Categories: " + ", ".join(f"[cyan]{c}[/cyan]" for c in categories))
     category = Prompt.ask("Category", default="code-quality")
+    project_type = Prompt.ask("Project type (empty for all)", default="")
 
     mistake = Prompt.ask("What was the mistake?")
     fix = Prompt.ask("How was it fixed?")
     rule = Prompt.ask("What rule should prevent this?")
 
-    add_lesson(category, mistake, fix, rule)
+    add_lesson(category, mistake, fix, rule, project_type)
 
     if Confirm.ask("Apply this lesson to current project?", default=True):
         apply_lessons_to_project(".")

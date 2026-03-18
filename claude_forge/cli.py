@@ -11,6 +11,8 @@ from rich.table import Table
 
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
+import json
+
 from .config import load_config, save_config, get_api_key
 from .models import fetch_models, filter_models, select_model
 from .scanner import scan_project, scan_available_skills
@@ -19,6 +21,13 @@ from .generator import generate_project
 from .learner import interactive_learn, list_lessons, apply_lessons_to_project, load_lessons
 from .release import quality_gate, smart_push, create_release, build_exe
 from .versioning import show_version_info, interactive_bump
+from .profiles.loader import load_profile, list_profiles
+from .profiles.applicator import apply_profile
+from .profiles.extractor import extract_profile, save_profile_yaml
+from .navigator import build_registry, match_skills, display_skill_analysis
+from .mapper import write_codemap
+from .context_manager import display_context_status, display_compact_preview
+from .sync import export_project, import_project, diff_projects, display_diff
 
 console = Console()
 
@@ -41,7 +50,10 @@ MAIN_MENU = [
     ("5", "Learning System",    "Record lessons, view & apply rules"),
     ("6", "Build Executable",   "Build project as .exe (PyInstaller)"),
     ("7", "Skills & Models",    "View skill inventory, change AI model"),
-    ("8", "Settings",           "API key, default model, config"),
+    ("8", "Profiles",           "Manage project profiles"),
+    ("9", "Map & Context",      "Codemap, memory management"),
+    ("s", "Sync",               "Cross-project setup sync"),
+    ("0", "Settings",           "API key, default model, config"),
     ("h", "Help",               "Show usage guide and examples"),
     ("q", "Quit",               "Exit Claude Forge"),
 ]
@@ -297,7 +309,8 @@ def flow_skills_models(config: dict) -> None:
     """Skills & models submenu."""
     SM_MENU = [
         ("1", "Skill Inventory",  "Show all available skills and plugins"),
-        ("2", "Change Model",     "Select a different AI model"),
+        ("2", "Skill Navigator",  "Analyze project and recommend skills"),
+        ("3", "Change Model",     "Select a different AI model"),
         ("b", "Back",             "Return to main menu"),
     ]
 
@@ -316,6 +329,12 @@ def flow_skills_models(config: dict) -> None:
                     console.print(f"  [cyan]{s['name']}[/cyan] -- {s['description'] or '(no description)'}")
             console.print(f"\n  [dim]{len(skills_info['plugin_commands'])} plugin commands, {len(skills_info['plugin_agents'])} plugin agents[/dim]")
         elif choice == "2":
+            project_path_input = ask_path("Project path", must_exist=True)
+            project_info = scan_project(project_path_input)
+            registry = build_registry(config.get("claude_home"))
+            result = match_skills(registry, project_info["languages"], project_info["frameworks"])
+            display_skill_analysis(result, project_info["name"])
+        elif choice == "3":
             api_key = get_api_key(config)
             if not api_key:
                 console.print("[red]Set API key first.[/red]")
@@ -330,6 +349,118 @@ def flow_skills_models(config: dict) -> None:
                 config["default_model"] = selected
                 save_config(config)
                 console.print(f"[green]Default model set to: {selected}[/green]")
+
+        console.print("\n[dim]Press Enter to continue...[/dim]")
+        input()
+
+
+def flow_profiles(config: dict) -> None:
+    """Profile management submenu."""
+    PROFILE_MENU = [
+        ("1", "List Profiles",    "Show available profiles"),
+        ("2", "Apply to Project", "Apply a profile to a project"),
+        ("3", "Create from Project", "Extract profile from existing project"),
+        ("b", "Back",             "Return to main menu"),
+    ]
+    while True:
+        console.print(Panel("Profile Management", border_style="magenta"))
+        choice = show_menu(PROFILE_MENU, "Profiles")
+
+        if choice == "b":
+            break
+        elif choice == "1":
+            names = list_profiles()
+            console.print("\n[bold]Available Profiles:[/bold]")
+            for name in names:
+                try:
+                    p = load_profile(name)
+                    console.print(f"  [cyan]{name}[/cyan] -- {p.description}")
+                except Exception:
+                    console.print(f"  [cyan]{name}[/cyan] -- [dim](error loading)[/dim]")
+        elif choice == "2":
+            names = list_profiles()
+            console.print("Profiles: " + ", ".join(f"[cyan]{n}[/cyan]" for n in names))
+            profile_name = Prompt.ask("Profile name")
+            project_path = ask_path("Project path", must_exist=True)
+            try:
+                profile = load_profile(profile_name)
+                apply_profile(profile, Path(project_path))
+            except FileNotFoundError as e:
+                console.print(f"[red]{e}[/red]")
+        elif choice == "3":
+            project_path = ask_path("Project path", must_exist=True)
+            name = Prompt.ask("Profile name")
+            profile = extract_profile(Path(project_path), name)
+            out_dir = Path.home() / ".claude-forge" / "profiles"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_file = out_dir / f"{name}.yaml"
+            save_profile_yaml(profile, out_file)
+            console.print(f"[green]Profile saved: {out_file}[/green]")
+
+        console.print("\n[dim]Press Enter to continue...[/dim]")
+        input()
+
+
+def flow_map_context() -> None:
+    """Map & Context submenu."""
+    MAP_MENU = [
+        ("1", "Generate Codemap",   "Proje haritasi uret (docs/CODEMAP.md)"),
+        ("2", "Context Status",     "Memory ve context durumu"),
+        ("3", "Compact Preview",    "Eski memory dosyalarini goster"),
+        ("b", "Back",               "Return to main menu"),
+    ]
+    while True:
+        console.print(Panel("Map & Context", border_style="blue"))
+        choice = show_menu(MAP_MENU, "Map & Context")
+
+        if choice == "b":
+            break
+        elif choice == "1":
+            project_path = ask_path("Project path", must_exist=True)
+            write_codemap(Path(project_path))
+        elif choice == "2":
+            project_path = ask_path("Project path", must_exist=True)
+            display_context_status(Path(project_path))
+        elif choice == "3":
+            project_path = ask_path("Project path", must_exist=True)
+            display_compact_preview(Path(project_path))
+
+        console.print("\n[dim]Press Enter to continue...[/dim]")
+        input()
+
+
+def flow_sync() -> None:
+    """Cross-project sync submenu."""
+    SYNC_MENU = [
+        ("1", "Export",  "Mevcut projenin setup'ini disa aktar"),
+        ("2", "Import",  "Baska projeden setup al"),
+        ("3", "Diff",    "Iki projenin setup'ini karsilastir"),
+        ("b", "Back",    "Return to main menu"),
+    ]
+    while True:
+        console.print(Panel("Cross-Project Sync", border_style="green"))
+        choice = show_menu(SYNC_MENU, "Sync")
+
+        if choice == "b":
+            break
+        elif choice == "1":
+            project_path = ask_path("Project path", must_exist=True)
+            data = export_project(Path(project_path))
+            out = Path(project_path) / "claude-forge-export.json"
+            out.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            console.print(f"[green]Exported: {out}[/green]")
+        elif choice == "2":
+            project_path = ask_path("Target project path", must_exist=True)
+            export_file = ask_path("Export JSON file path", must_exist=True)
+            stats = import_project(Path(project_path), Path(export_file))
+            console.print(f"\n[green]Imported: {stats['rules_imported']} rules, {stats['hooks_imported']} hooks[/green]")
+            if stats["skipped"]:
+                console.print(f"[dim]Skipped: {stats['skipped']}[/dim]")
+        elif choice == "3":
+            p1 = ask_path("Project 1 path", must_exist=True)
+            p2 = ask_path("Project 2 path", must_exist=True)
+            diff = diff_projects(Path(p1), Path(p2))
+            display_diff(diff, Path(p1).name, Path(p2).name)
 
         console.print("\n[dim]Press Enter to continue...[/dim]")
         input()
@@ -468,7 +599,8 @@ def flow_help() -> None:
 @click.command()
 @click.argument("project_path", required=False, type=click.Path())
 @click.option("--model", "-m", help="Override default model")
-def main(project_path, model):
+@click.option("--profile", "-p", help="Apply a profile instead of AI analysis")
+def main(project_path, model, profile):
     """Claude Forge -- AI-powered Claude Code project setup tool.
 
     Run without arguments for interactive mode.
@@ -484,6 +616,13 @@ def main(project_path, model):
                 path.mkdir(parents=True, exist_ok=True)
             else:
                 raise SystemExit(0)
+        if profile:
+            try:
+                prof = load_profile(profile)
+                apply_profile(prof, path)
+            except FileNotFoundError as e:
+                console.print(f"[red]{e}[/red]")
+            return
         if model:
             config["default_model"] = model
         _run_init(str(path.resolve()), config)
@@ -513,6 +652,12 @@ def main(project_path, model):
             elif choice == "7":
                 flow_skills_models(config)
             elif choice == "8":
+                flow_profiles(config)
+            elif choice == "9":
+                flow_map_context()
+            elif choice == "s":
+                flow_sync()
+            elif choice == "0":
                 flow_settings(config)
             elif choice == "h":
                 flow_help()
