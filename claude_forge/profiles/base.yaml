@@ -1,0 +1,58 @@
+version: 1
+name: base
+description: "Tum projelere ortak temel kurallar"
+languages: []
+frameworks: []
+
+claude_md:
+  coding_standards: |
+    - Type hints zorunlu
+    - Fonksiyonlar max 30 satir
+    - console.log/print birakma, logger kullan
+  test_command: ""
+  lint_command: ""
+
+hooks:
+  - name: protect-env.sh
+    event: PreToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *".env" ]] && [[ "$FILE_PATH" != *".env.example" ]]; then
+        echo '{"block": true, "message": "BLOCKED: .env dosyalari duzenlenemez."}' >&2
+        exit 2
+      fi
+
+rules:
+  - name: no-env-edit.md
+    content: |
+      ---
+      description: .env dosyalarini asla duzenleme
+      ---
+      .env dosyalarini asla duzenleme. Sadece .env.example duzenlenebilir.
+  - name: git-safety.md
+    content: |
+      ---
+      description: Git guvenlik kurallari
+      ---
+      - main/master branch'e direkt push yapma
+      - Force push kullanma
+      - Commit oncesi lint ve test calistir
+
+skills_include: []
+skills_exclude: []
+
+memory_templates:
+  - name: MEMORY.md
+    content: |
+      # Project Memory -- Routing
+      Last updated: -
+      ## Critical Notes
+      - (none yet)
+  - name: debugging.md
+    content: |
+      # Debugging Log
+      _(No entries yet)_
+  - name: preferences.md
+    content: |
+      # Working Preferences
+      _(No entries yet)_

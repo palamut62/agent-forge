@@ -1,0 +1,30 @@
+version: 1
+name: telegram_bot
+description: "Python Telegram bot projesi"
+extends: base
+languages: [python]
+frameworks: [telegram-bot]
+
+claude_md:
+  tech_stack: "Python 3.12, python-telegram-bot/aiogram, httpx, loguru"
+  coding_standards: |
+    - async handler'lar kullan
+    - Komut handler'larini ayri dosyalarda tut
+    - Hata mesajlarini kullaniciya Turkce goster
+  test_command: "pytest tests/ -v"
+  lint_command: "ruff check --fix && ruff format"
+
+skills_include:
+  - python-review
+  - python-patterns
+  - tdd-workflow
+  - security-review
+
+skills_exclude:
+  - "threejs-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "golang-*"
+  - "frontend-*"
+  - "react-*"
+  - "springboot-*"

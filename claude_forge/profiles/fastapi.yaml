@@ -1,0 +1,72 @@
+version: 1
+name: fastapi
+description: "FastAPI + Python async projesi"
+extends: base
+languages: [python]
+frameworks: [fastapi]
+
+claude_md:
+  tech_stack: "Python 3.12, FastAPI, httpx, pydantic, SQLAlchemy, alembic"
+  coding_standards: |
+    - Type hints zorunlu
+    - async/await tercih et (I/O-bound islemler)
+    - Pydantic model kullan (raw dict degil)
+    - httpx.AsyncClient kullan (requests degil)
+    - Router'lari routes/ altinda topla
+    - Business logic services/ altinda
+  test_command: "pytest tests/ -v"
+  lint_command: "ruff check --fix && ruff format"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.py ]]; then
+        ruff format "$FILE_PATH" 2>/dev/null
+        ruff check --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: async-io.md
+    content: |
+      ---
+      description: I/O islemlerinde async kullan
+      ---
+      I/O islemlerinde her zaman async/await kullan.
+      requests yerine httpx.AsyncClient, time.sleep yerine asyncio.sleep.
+  - name: pydantic-models.md
+    content: |
+      ---
+      description: API modelleri icin pydantic kullan
+      ---
+      API request/response icin Pydantic model kullan. Raw dict donme.
+
+skills_include:
+  - tdd-workflow
+  - security-review
+  - api-design
+  - python-review
+  - python-patterns
+  - python-testing
+  - postgres-patterns
+  - docker-patterns
+
+skills_exclude:
+  - "threejs-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "golang-*"
+  - "perl-*"
+  - "springboot-*"
+  - "jpa-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+      _(Buraya ekle)_
+  - name: api-contracts.md
+    content: |
+      # API Sozlesmeleri
+      _(Buraya ekle)_

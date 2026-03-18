@@ -1,0 +1,41 @@
+version: 1
+name: react
+description: "React + TypeScript projesi"
+extends: base
+languages: [node]
+frameworks: [react]
+
+claude_md:
+  tech_stack: "React 18+, TypeScript, Vite/Next.js"
+  coding_standards: |
+    - TypeScript strict mode
+    - No any type
+    - Functional components + hooks
+    - CSS Modules veya Tailwind
+  test_command: "npm test"
+  lint_command: "npx eslint --fix . && npx prettier --write ."
+
+rules:
+  - name: no-any.md
+    content: |
+      ---
+      description: any type kullanma
+      ---
+      TypeScript'te asla any type kullanma. unknown veya spesifik tip kullan.
+
+skills_include:
+  - frontend-patterns
+  - vercel-react-best-practices
+  - web-design-guidelines
+  - tdd-workflow
+  - security-review
+
+skills_exclude:
+  - "python-*"
+  - "django-*"
+  - "fastapi-*"
+  - "golang-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "perl-*"
+  - "springboot-*"

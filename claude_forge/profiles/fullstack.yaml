@@ -1,0 +1,32 @@
+version: 1
+name: fullstack
+description: "Fullstack proje (Python backend + React frontend)"
+extends: base
+languages: [python, node]
+frameworks: [fastapi, react]
+
+claude_md:
+  tech_stack: "FastAPI + React + TypeScript + PostgreSQL"
+  coding_standards: |
+    - Backend: Python type hints, async/await
+    - Frontend: TypeScript strict, no any
+    - API: OpenAPI schema driven
+  test_command: "pytest tests/ -v && cd frontend && npm test"
+  lint_command: "ruff check --fix && cd frontend && npx eslint --fix ."
+
+skills_include:
+  - tdd-workflow
+  - security-review
+  - api-design
+  - python-review
+  - frontend-patterns
+  - postgres-patterns
+  - docker-patterns
+
+skills_exclude:
+  - "threejs-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "golang-*"
+  - "perl-*"
+  - "springboot-*"

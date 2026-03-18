@@ -1,0 +1,28 @@
+version: 1
+name: data_pipeline
+description: "Veri pipeline'i (ETL, batch processing)"
+extends: base
+languages: [python]
+frameworks: []
+
+claude_md:
+  tech_stack: "Python 3.12, pandas/polars, httpx, SQLAlchemy"
+  coding_standards: |
+    - Idempotent islemler
+    - Her adim loglama
+    - Retry mekanizmasi
+  test_command: "pytest tests/ -v"
+  lint_command: "ruff check --fix && ruff format"
+
+skills_include:
+  - python-review
+  - python-patterns
+  - postgres-patterns
+  - tdd-workflow
+
+skills_exclude:
+  - "threejs-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "frontend-*"
+  - "springboot-*"

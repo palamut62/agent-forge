@@ -1,0 +1,28 @@
+version: 1
+name: cli_tool
+description: "Python CLI uygulamasi (click/typer)"
+extends: base
+languages: [python]
+frameworks: []
+
+claude_md:
+  tech_stack: "Python 3.12, click/typer, rich"
+  coding_standards: |
+    - Her komut icin --help dokumantasyonu
+    - Exit code'lari duzgun kullan (0=ok, 1=error)
+    - Rich ile guzel cikti
+  test_command: "pytest tests/ -v"
+  lint_command: "ruff check --fix && ruff format"
+
+skills_include:
+  - python-review
+  - python-patterns
+  - tdd-workflow
+
+skills_exclude:
+  - "threejs-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "golang-*"
+  - "frontend-*"
+  - "springboot-*"
