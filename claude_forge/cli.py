@@ -330,6 +330,53 @@ def _run_init(project_path: str, config: dict, target: str | None = None) -> Non
     console.print(f"  Frameworks: {', '.join(project_info['frameworks']) or 'unknown'}")
     console.print(f"  Files: {project_info['file_count']}")
 
+    # Empty/new project: offer profile selection instead of AI analysis
+    if not project_info["languages"] and project_info["file_count"] <= 3:
+        console.print("\n  [yellow]Empty or new project detected.[/yellow]")
+        console.print("  You can apply a built-in profile (fast, no AI needed) or use AI analysis.")
+
+        profile_names = list_profiles()
+        profile_options = [("ai", "AI Analysis", "Use AI to generate a custom setup plan")]
+        for pname in sorted(profile_names):
+            if pname == "base":
+                continue
+            try:
+                p = load_profile(pname)
+                profile_options.append((pname, pname, p.description))
+            except Exception:
+                profile_options.append((pname, pname, ""))
+
+        selected = show_menu(
+            profile_options,
+            title="Setup Method",
+            subtitle="Pick a profile for your project type, or choose AI Analysis.",
+            cancel_value="ai",
+        )
+
+        if selected != "ai":
+            console.print(f"\n[bold]Applying profile: {selected}[/bold]")
+            try:
+                profile = load_profile(selected)
+                apply_profile(
+                    profile,
+                    Path(project_path),
+                    target=resolved_target,
+                    target_home=get_target_home(config, resolved_target),
+                )
+            except FileNotFoundError as e:
+                console.print(f"[red]{e}[/red]")
+                return
+
+            # Apply lessons
+            if load_lessons():
+                console.print("\n[bold]Applying learned lessons...[/bold]")
+                count = apply_lessons_to_project(project_path, target=resolved_target)
+                if count:
+                    console.print(f"  [green]{count} lesson rules applied.[/green]")
+
+            console.print(f"\n  [green bold]Done![/green bold] Project ready at: [bold]{project_path}[/bold]")
+            return
+
     # 2. Skills
     console.print("\n[bold]2/4 -- Scanning skill inventory...[/bold]")
     skills_info = scan_available_skills(get_target_home(config, resolved_target), target=resolved_target)
