@@ -33,6 +33,16 @@ When you create a new project or want to add an AI assistant to an existing one,
 ### Skill System (everything-claude-code)
 Skills are automatically fetched from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) — 170+ skills covering Python, JS, Go, Rust, Swift, Kotlin, Django, React, and more. Each profile includes a curated `skills_include` list; only relevant skills are copied to your project.
 
+### MCP Server Integration
+Agent Forge supports MCP (Model Context Protocol) server configuration across all targets. Example: [FreeWeb](https://github.com/xenitV1/freeweb) — a free web search/browse MCP server with no API keys required.
+
+MCP servers are automatically configured for each target:
+| Target | Config Location |
+|--------|----------------|
+| Claude Code | `~/.claude/.mcp.json` |
+| Codex CLI | `~/.codex/config.toml` (`[mcp_servers.*]`) |
+| Gemini / Antigravity | `~/.gemini/settings.json` |
+
 ### Advanced Features
 - **Learning System**: Learn from mistakes, auto-apply rules to new projects
 - **Profile System**: Create, apply, and extract profiles
