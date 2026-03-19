@@ -104,8 +104,8 @@ def write_mcp_config(
     config_dir = project_path / target.config_dir
 
     if target.key == "claude":
-        # Claude: .mcp.json inside .claude/
-        out = config_dir / target.mcp_config_file
+        # Claude: .mcp.json at project root (project-scope MCP)
+        out = project_path / target.mcp_config_file
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(content, encoding="utf-8")
         return out
@@ -123,8 +123,8 @@ def write_mcp_config(
         return out
 
     elif target.key == "antigravity":
-        # Antigravity: merge mcpServers into settings.json
-        out = config_dir / target.settings_file
+        # Antigravity: mcp_config.json inside .antigravity/
+        out = config_dir / target.mcp_config_file
         out.parent.mkdir(parents=True, exist_ok=True)
         existing: dict = {}
         if out.exists():
