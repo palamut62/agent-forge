@@ -84,10 +84,13 @@ def _get_skills_dest(project_path: Path, config_dir: str) -> Path:
     """Return the correct skills destination directory for the target.
 
     Codex uses .agents/skills/ per the official skill spec.
-    Claude and Antigravity use <config_dir>/skills/.
+    Antigravity uses .agent/skills/ (singular) per Google docs.
+    Claude uses .claude/skills/.
     """
     if config_dir == ".codex":
         return project_path / ".agents" / "skills"
+    if config_dir == ".antigravity":
+        return project_path / ".agent" / "skills"
     return project_path / config_dir / "skills"
 
 
@@ -122,8 +125,8 @@ def _convert_skill_for_codex(src_dir: Path, dst_dir: Path) -> None:
 
     (dst_dir / "SKILL.md").write_text(content, encoding="utf-8")
 
-    # Copy optional subdirectories
-    for subdir in ("scripts", "references", "assets"):
+    # Copy optional subdirectories (Codex: references/, Antigravity: resources/)
+    for subdir in ("scripts", "references", "resources", "assets", "examples"):
         src_sub = src_dir / subdir
         if src_sub.is_dir():
             shutil.copytree(src_sub, dst_dir / subdir, dirs_exist_ok=True)
@@ -146,7 +149,7 @@ def copy_skills_to_project(
 
     dest_skills = _get_skills_dest(project_path, config_dir)
     dest_skills.mkdir(parents=True, exist_ok=True)
-    is_codex = config_dir == ".codex"
+    use_skill_md_format = config_dir in (".codex", ".antigravity")
 
     copied: list[str] = []
     for name in skill_names:
@@ -154,7 +157,7 @@ def copy_skills_to_project(
         if not src.is_dir():
             continue
         dst = dest_skills / name
-        if is_codex:
+        if use_skill_md_format:
             _convert_skill_for_codex(src, dst)
         else:
             shutil.copytree(src, dst, dirs_exist_ok=True)
