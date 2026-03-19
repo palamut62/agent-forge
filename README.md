@@ -41,9 +41,21 @@ Skills are automatically fetched from [everything-claude-code](https://github.co
 - **Cross-project Sync**: Transfer and compare setups between projects
 - **Release Manager**: Version management, quality gates, smart push
 
+## Requirements
+
+- **Node.js 18+** (for the interactive TUI)
+- **Python 3.10+** (backend)
+- **Git** (for skill fetching)
+
 ## Installation
 
 ```bash
+# Clone the repo
+git clone https://github.com/palamut62/agent-forge.git
+cd agent-forge
+
+# Install dependencies
+npm install
 pip install -e .
 ```
 
@@ -51,30 +63,41 @@ pip install -e .
 
 ### Interactive mode
 ```bash
-agent-forge-py
+npx agent-forge
 ```
 
 ### Quick setup
 ```bash
-agent-forge-py /path/to/project
+npx agent-forge /path/to/project
 ```
 
 ### With specific target
 ```bash
-agent-forge-py /path/to/project -t codex
+npx agent-forge /path/to/project -t codex
 ```
 
-### With profile
+### With profile (skip AI analysis)
 ```bash
-agent-forge-py /path/to/project -p fastapi
+npx agent-forge /path/to/project -p fastapi
 ```
 
-### Specific flow
+### Run a specific flow
 ```bash
-agent-forge-py --flow settings
-agent-forge-py --flow scan-project
-agent-forge-py --flow release
+npx agent-forge --flow settings
+npx agent-forge --flow scan-project
+npx agent-forge --flow release
 ```
+
+### Keyboard shortcuts (TUI)
+| Key | Action |
+|-----|--------|
+| `Up/Down` or `j/k` | Navigate menu |
+| `Enter` | Select |
+| `Type` | Filter items |
+| `/` | Command palette |
+| `Esc` | Go back |
+| `?` | Toggle help |
+| `Ctrl+C` | Quit |
 
 ## Profiles
 
