@@ -80,6 +80,55 @@ def fetch_ecc_skills(force: bool = False) -> Path:
     return CACHE_SKILLS_DIR
 
 
+def _get_skills_dest(project_path: Path, config_dir: str) -> Path:
+    """Return the correct skills destination directory for the target.
+
+    Codex uses .agents/skills/ per the official skill spec.
+    Claude and Antigravity use <config_dir>/skills/.
+    """
+    if config_dir == ".codex":
+        return project_path / ".agents" / "skills"
+    return project_path / config_dir / "skills"
+
+
+def _convert_skill_for_codex(src_dir: Path, dst_dir: Path) -> None:
+    """Copy a skill to Codex format: <skill>/SKILL.md + optional subdirs.
+
+    ECC skills already have SKILL.md with frontmatter. This function ensures
+    the directory structure matches Codex conventions:
+      <skill-name>/
+        SKILL.md          (required - instructions + frontmatter)
+        scripts/           (optional - copied if exists)
+        references/        (optional - copied if exists)
+        assets/            (optional - copied if exists)
+    """
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    # Find the main skill markdown file
+    skill_md = src_dir / "SKILL.md"
+    if not skill_md.exists():
+        # Some ECC skills might use different names — find the first .md
+        md_files = list(src_dir.glob("*.md"))
+        if not md_files:
+            return
+        skill_md = md_files[0]
+
+    # Read content and ensure proper frontmatter
+    content = skill_md.read_text(encoding="utf-8", errors="ignore")
+    if not content.startswith("---"):
+        # Add frontmatter from directory name
+        name = src_dir.name
+        content = f"---\nname: {name}\ndescription: {name} skill\n---\n\n{content}"
+
+    (dst_dir / "SKILL.md").write_text(content, encoding="utf-8")
+
+    # Copy optional subdirectories
+    for subdir in ("scripts", "references", "assets"):
+        src_sub = src_dir / subdir
+        if src_sub.is_dir():
+            shutil.copytree(src_sub, dst_dir / subdir, dirs_exist_ok=True)
+
+
 def copy_skills_to_project(
     project_path: Path,
     config_dir: str,
@@ -95,8 +144,9 @@ def copy_skills_to_project(
         console.print("  [yellow]No cached skills available.[/yellow]")
         return []
 
-    dest_skills = project_path / config_dir / "skills"
+    dest_skills = _get_skills_dest(project_path, config_dir)
     dest_skills.mkdir(parents=True, exist_ok=True)
+    is_codex = config_dir == ".codex"
 
     copied: list[str] = []
     for name in skill_names:
@@ -104,7 +154,10 @@ def copy_skills_to_project(
         if not src.is_dir():
             continue
         dst = dest_skills / name
-        shutil.copytree(src, dst, dirs_exist_ok=True)
+        if is_codex:
+            _convert_skill_for_codex(src, dst)
+        else:
+            shutil.copytree(src, dst, dirs_exist_ok=True)
         copied.append(name)
 
     return copied
