@@ -39,8 +39,10 @@ htmlcov/
 Thumbs.db
 Desktop.ini
 
-# Claude Code local settings
-.claude/settings.local.json
+# Claude Code
+.claude/
+CLAUDE.md
+memory/
 
 # Environment
 .env
