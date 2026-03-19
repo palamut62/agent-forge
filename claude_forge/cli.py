@@ -228,6 +228,88 @@ def intro_subtitle(config: dict) -> str:
     )
 
 
+# --- Profile Auto-Match ---
+
+# Keywords mapped to profile names for auto-matching
+_PROFILE_KEYWORDS: dict[str, list[str]] = {
+    "fastapi": ["fastapi", "fast api", "python api", "python rest", "python backend"],
+    "django": ["django", "drf", "django rest"],
+    "express_node": ["express", "node api", "node backend", "nodejs api", "koa"],
+    "react": ["react", "react app", "react spa", "vite react"],
+    "nextjs": ["next", "nextjs", "next.js", "next js"],
+    "vue": ["vue", "vuejs", "vue.js", "nuxt"],
+    "react_native": ["react native", "expo", "react-native"],
+    "flutter": ["flutter", "dart", "dart mobile"],
+    "kotlin_android": ["kotlin", "android", "jetpack compose", "android app"],
+    "swift_ios": ["swift", "ios", "swiftui", "ios app", "iphone"],
+    "electron": ["electron", "desktop app", "tauri"],
+    "golang": ["go", "golang", "go api", "go backend"],
+    "rust": ["rust", "cargo", "rust api"],
+    "springboot": ["spring", "springboot", "spring boot", "java api", "java backend"],
+    "telegram_bot": ["telegram", "bot", "telegram bot", "chat bot", "discord bot"],
+    "cli_tool": ["cli", "command line", "terminal tool", "cli tool"],
+    "data_pipeline": ["data pipeline", "etl", "data processing", "pipeline", "scraper"],
+    "fullstack": ["fullstack", "full stack", "full-stack", "monorepo"],
+}
+
+
+def _match_profile(description: str) -> str | None:
+    """Match a free-text description to a profile name."""
+    desc_lower = description.lower().strip()
+    # Score each profile by keyword matches
+    best_profile = None
+    best_score = 0
+    for profile, keywords in _PROFILE_KEYWORDS.items():
+        for kw in keywords:
+            if kw in desc_lower:
+                score = len(kw)  # longer match = better
+                if score > best_score:
+                    best_score = score
+                    best_profile = profile
+    return best_profile
+
+
+def _ask_project_type() -> str | None:
+    """Ask user what they want to build and auto-match to a profile."""
+    console.print("  What kind of application are you building?")
+    console.print("  [dim]Examples: 'FastAPI REST API', 'React app', 'Flutter mobile', 'Go CLI tool'[/dim]")
+    description = Prompt.ask("  Describe your project")
+
+    if not description.strip():
+        return "ai"
+
+    matched = _match_profile(description)
+
+    if matched:
+        try:
+            p = load_profile(matched)
+            console.print(f"\n  [green]Matched profile:[/green] [bold]{matched}[/bold] -- {p.description}")
+            if Confirm.ask("  Use this profile?", default=True):
+                return matched
+        except Exception:
+            pass
+
+    # No match or user declined — show full list
+    console.print("\n  [dim]Pick a profile manually or use AI analysis:[/dim]")
+    profile_names = list_profiles()
+    profile_options = [("ai", "AI Analysis", "Use AI to generate a custom setup plan")]
+    for pname in sorted(profile_names):
+        if pname == "base":
+            continue
+        try:
+            p = load_profile(pname)
+            profile_options.append((pname, pname, p.description))
+        except Exception:
+            profile_options.append((pname, pname, ""))
+
+    return show_menu(
+        profile_options,
+        title="Setup Method",
+        subtitle="Pick a profile or choose AI Analysis.",
+        cancel_value="ai",
+    )
+
+
 # --- Interactive Flows ---
 
 def flow_new_project(config: dict) -> None:
@@ -330,30 +412,13 @@ def _run_init(project_path: str, config: dict, target: str | None = None) -> Non
     console.print(f"  Frameworks: {', '.join(project_info['frameworks']) or 'unknown'}")
     console.print(f"  Files: {project_info['file_count']}")
 
-    # Empty/new project: offer profile selection instead of AI analysis
+    # Empty/new project: ask what they want to build, auto-match profile
     if not project_info["languages"] and project_info["file_count"] <= 3:
         console.print("\n  [yellow]Empty or new project detected.[/yellow]")
-        console.print("  You can apply a built-in profile (fast, no AI needed) or use AI analysis.")
 
-        profile_names = list_profiles()
-        profile_options = [("ai", "AI Analysis", "Use AI to generate a custom setup plan")]
-        for pname in sorted(profile_names):
-            if pname == "base":
-                continue
-            try:
-                p = load_profile(pname)
-                profile_options.append((pname, pname, p.description))
-            except Exception:
-                profile_options.append((pname, pname, ""))
+        selected = _ask_project_type()
 
-        selected = show_menu(
-            profile_options,
-            title="Setup Method",
-            subtitle="Pick a profile for your project type, or choose AI Analysis.",
-            cancel_value="ai",
-        )
-
-        if selected != "ai":
+        if selected and selected != "ai":
             console.print(f"\n[bold]Applying profile: {selected}[/bold]")
             try:
                 profile = load_profile(selected)
