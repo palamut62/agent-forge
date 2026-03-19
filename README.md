@@ -30,10 +30,13 @@ When you create a new project or want to add an AI assistant to an existing one,
 - Context compaction summaries
 - QA gate warnings
 
+### Skill System (everything-claude-code)
+Skills are automatically fetched from [everything-claude-code](https://github.com/affaan-m/everything-claude-code) — 170+ skills covering Python, JS, Go, Rust, Swift, Kotlin, Django, React, and more. Each profile includes a curated `skills_include` list; only relevant skills are copied to your project.
+
 ### Advanced Features
 - **Learning System**: Learn from mistakes, auto-apply rules to new projects
 - **Profile System**: Create, apply, and extract profiles
-- **Skill Navigator**: Recommends relevant skills from 190+ available
+- **Skill Navigator**: Recommends relevant skills from 170+ available
 - **Codemap Generator**: Creates project structure maps
 - **Cross-project Sync**: Transfer and compare setups between projects
 - **Release Manager**: Version management, quality gates, smart push
@@ -154,6 +157,7 @@ claude_forge/
 ├── navigator.py         # Skill matching
 ├── mapper.py            # Codemap generation
 ├── context_manager.py   # Memory/context status
+├── skill_fetcher.py     # ECC skill fetching and caching
 ├── sync.py              # Cross-project sync
 ├── release.py           # Version/release management
 ├── versioning.py        # Semver detection and bumping
