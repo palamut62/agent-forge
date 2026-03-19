@@ -252,11 +252,10 @@ rules:
 
 skills_include:
   - tdd-workflow
-  - mobile-patterns
-  - swift-patterns
+  - swift-concurrency-6-2
   - swiftui-patterns
-  - ios-patterns
-  - clean-architecture
+  - coding-standards
+  - verification-loop
 
 skills_exclude:
   - "python-*"

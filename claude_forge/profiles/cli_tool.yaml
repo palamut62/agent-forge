@@ -199,11 +199,12 @@ rules:
       ```
 
 skills_include:
-  - python-review
   - python-patterns
   - python-testing
   - tdd-workflow
   - security-review
+  - coding-standards
+  - verification-loop
 
 skills_exclude:
   - "threejs-*"

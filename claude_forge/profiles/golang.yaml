@@ -220,9 +220,13 @@ skills_include:
   - tdd-workflow
   - security-review
   - golang-patterns
+  - golang-testing
   - docker-patterns
   - backend-patterns
-  - database-patterns
+  - database-migrations
+  - coding-standards
+  - verification-loop
+  - deployment-patterns
 
 skills_exclude:
   - "python-*"

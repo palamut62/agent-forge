@@ -210,9 +210,12 @@ skills_include:
   - tdd-workflow
   - security-review
   - rust-patterns
-  - systems-programming
+  - rust-testing
   - backend-patterns
   - docker-patterns
+  - coding-standards
+  - verification-loop
+  - deployment-patterns
 
 skills_exclude:
   - "python-*"

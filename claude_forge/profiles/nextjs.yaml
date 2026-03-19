@@ -226,13 +226,12 @@ rules:
 
 skills_include:
   - frontend-patterns
-  - vercel-react-best-practices
-  - web-design-guidelines
   - tdd-workflow
   - security-review
-  - typescript-patterns
-  - tailwind-patterns
-  - prisma-patterns
+  - coding-standards
+  - verification-loop
+  - e2e-testing
+  - nextjs-turbopack
 
 skills_exclude:
   - "python-*"

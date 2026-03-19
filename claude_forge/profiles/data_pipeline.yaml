@@ -237,13 +237,15 @@ rules:
       ```
 
 skills_include:
-  - python-review
   - python-patterns
   - python-testing
   - postgres-patterns
   - tdd-workflow
   - security-review
   - database-migrations
+  - coding-standards
+  - verification-loop
+  - deployment-patterns
 
 skills_exclude:
   - "threejs-*"

@@ -214,10 +214,11 @@ rules:
 
 skills_include:
   - frontend-patterns
-  - vercel-react-best-practices
-  - web-design-guidelines
   - tdd-workflow
   - security-review
+  - coding-standards
+  - verification-loop
+  - e2e-testing
 
 skills_exclude:
   - "python-*"

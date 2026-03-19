@@ -229,11 +229,11 @@ rules:
 
 skills_include:
   - tdd-workflow
-  - mobile-patterns
   - kotlin-patterns
-  - compose-patterns
-  - clean-architecture
-  - android-patterns
+  - compose-multiplatform-patterns
+  - android-clean-architecture
+  - coding-standards
+  - verification-loop
 
 skills_exclude:
   - "python-*"

@@ -226,10 +226,8 @@ rules:
 skills_include:
   - frontend-patterns
   - tdd-workflow
-  - typescript-patterns
-  - mobile-patterns
-  - react-native-patterns
-  - expo-patterns
+  - coding-standards
+  - verification-loop
 
 skills_exclude:
   - "python-*"

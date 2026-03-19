@@ -232,7 +232,10 @@ skills_include:
   - jpa-patterns
   - backend-patterns
   - docker-patterns
-  - database-patterns
+  - database-migrations
+  - coding-standards
+  - verification-loop
+  - deployment-patterns
 
 skills_exclude:
   - "python-*"

@@ -208,11 +208,10 @@ rules:
 
 skills_include:
   - frontend-patterns
-  - web-design-guidelines
   - tdd-workflow
-  - typescript-patterns
-  - vite-patterns
-  - vue-patterns
+  - coding-standards
+  - verification-loop
+  - e2e-testing
 
 skills_exclude:
   - "python-*"

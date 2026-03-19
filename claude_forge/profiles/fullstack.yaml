@@ -214,12 +214,16 @@ skills_include:
   - tdd-workflow
   - security-review
   - api-design
-  - python-review
   - python-patterns
+  - python-testing
   - frontend-patterns
   - postgres-patterns
   - docker-patterns
   - backend-patterns
+  - coding-standards
+  - verification-loop
+  - deployment-patterns
+  - e2e-testing
 
 skills_exclude:
   - "threejs-*"

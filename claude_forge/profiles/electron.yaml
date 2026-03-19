@@ -220,10 +220,9 @@ rules:
 skills_include:
   - frontend-patterns
   - tdd-workflow
-  - typescript-patterns
-  - electron-patterns
   - security-review
-  - desktop-patterns
+  - coding-standards
+  - verification-loop
 
 skills_exclude:
   - "python-*"

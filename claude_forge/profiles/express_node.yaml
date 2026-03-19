@@ -246,11 +246,12 @@ rules:
 skills_include:
   - tdd-workflow
   - security-review
-  - typescript-patterns
   - backend-patterns
   - docker-patterns
-  - database-patterns
-  - node-patterns
+  - database-migrations
+  - coding-standards
+  - verification-loop
+  - deployment-patterns
 
 skills_exclude:
   - "python-*"
