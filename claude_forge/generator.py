@@ -94,6 +94,13 @@ def generate_project(
     if copied_skills:
         console.print(f"  [green][OK][/green] Copied skills: {', '.join(copied_skills)}")
 
+    # MCP servers
+    from .mcp import write_mcp_config
+    extra_mcp = plan.get("mcp_servers", {})
+    mcp_path = write_mcp_config(target_platform, path, extra_mcp or None)
+    if mcp_path:
+        console.print(f"  [green][OK][/green] MCP config: {mcp_path.name}")
+
     # Update .gitignore
     _update_gitignore(path, target_platform)
 

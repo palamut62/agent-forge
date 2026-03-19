@@ -47,3 +47,4 @@ class ProfileSchema(BaseModel):
     skills_include: list[str] = Field(default_factory=list)
     skills_exclude: list[str] = Field(default_factory=list)
     memory_templates: list[MemoryTemplate] = Field(default_factory=list)
+    mcp_servers: dict[str, dict] = Field(default_factory=dict)

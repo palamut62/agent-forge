@@ -14,6 +14,8 @@ class TargetPlatform:
     local_settings_file: str
     skill_profile_file: str
     default_home_dir: str
+    mcp_config_file: str = ""
+    mcp_config_format: str = "json"  # "json" or "toml"
 
 
 TARGETS: dict[str, TargetPlatform] = {
@@ -26,9 +28,9 @@ TARGETS: dict[str, TargetPlatform] = {
         local_settings_file="settings.local.json",
         skill_profile_file="skill-profile.json",
         default_home_dir=".claude",
+        mcp_config_file=".mcp.json",
+        mcp_config_format="json",
     ),
-    # Inference: Codex commonly uses AGENTS.md. The companion .codex directory is
-    # used by this tool to mirror the same local setup structure it creates for Claude.
     "codex": TargetPlatform(
         key="codex",
         label="Codex",
@@ -38,8 +40,9 @@ TARGETS: dict[str, TargetPlatform] = {
         local_settings_file="settings.local.json",
         skill_profile_file="skill-profile.json",
         default_home_dir=".codex",
+        mcp_config_file="config.toml",
+        mcp_config_format="toml",
     ),
-    # Inference: Antigravity support mirrors the same local layout pattern.
     "antigravity": TargetPlatform(
         key="antigravity",
         label="Antigravity",
@@ -49,6 +52,8 @@ TARGETS: dict[str, TargetPlatform] = {
         local_settings_file="settings.local.json",
         skill_profile_file="skill-profile.json",
         default_home_dir=".antigravity",
+        mcp_config_file="settings.json",
+        mcp_config_format="json",
     ),
 }
 

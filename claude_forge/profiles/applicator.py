@@ -85,6 +85,13 @@ def apply_profile(
     if copied:
         console.print(f"  [green][OK][/green] Copied skills: {', '.join(copied)}")
 
+    # MCP servers
+    from ..mcp import write_mcp_config
+    mcp_extra = {name: srv for name, srv in getattr(profile, "mcp_servers", {}).items()} if hasattr(profile, "mcp_servers") else None
+    mcp_path = write_mcp_config(target_platform, project_path, mcp_extra)
+    if mcp_path:
+        console.print(f"  [green][OK][/green] MCP config: {mcp_path.name}")
+
     console.print(f"\n[green bold]Profil '{profile.name}' uygulandi![/green bold]")
 
 
