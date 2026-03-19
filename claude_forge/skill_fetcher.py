@@ -1,5 +1,6 @@
 """Fetch and cache skills from everything-claude-code GitHub repo."""
 
+import re
 import shutil
 import subprocess
 import time
@@ -94,23 +95,91 @@ def _get_skills_dest(project_path: Path, config_dir: str) -> Path:
     return project_path / config_dir / "skills"
 
 
-def _convert_skill_for_codex(src_dir: Path, dst_dir: Path) -> None:
-    """Copy a skill to Codex format: <skill>/SKILL.md + optional subdirs.
+# Claude-specific terms to replace per target platform
+_CODEX_REPLACEMENTS: list[tuple[str, str]] = [
+    # Tool references
+    (r"\buse the Read tool\b", "read the file"),
+    (r"\bUse the Read tool\b", "Read the file"),
+    (r"\buse the Edit tool\b", "edit the file"),
+    (r"\bUse the Edit tool\b", "Edit the file"),
+    (r"\buse the Write tool\b", "write the file"),
+    (r"\bUse the Write tool\b", "Write the file"),
+    (r"\buse the Bash tool\b", "run the command"),
+    (r"\bUse the Bash tool\b", "Run the command"),
+    (r"\buse the Grep tool\b", "search file contents"),
+    (r"\bUse the Grep tool\b", "Search file contents"),
+    (r"\buse the Glob tool\b", "find files by pattern"),
+    (r"\bUse the Glob tool\b", "Find files by pattern"),
+    (r"\buse the Agent tool\b", "dispatch a subtask"),
+    (r"\bUse the Agent tool\b", "Dispatch a subtask"),
+    (r"\buse the Skill tool\b", "invoke the skill"),
+    (r"\bUse the Skill tool\b", "Invoke the skill"),
+    # Config references
+    (r"\bCLAUDE\.md\b", "AGENTS.md"),
+    (r"\.claude/", ".codex/"),
+    # Claude-specific commands
+    (r"/compact\b", "compact the context"),
+    (r"\bTodoWrite\b", "task tracking"),
+    (r"\bTodoRead\b", "task reading"),
+    # Branding
+    (r"\bClaude Code\b", "Codex"),
+]
 
-    ECC skills already have SKILL.md with frontmatter. This function ensures
-    the directory structure matches Codex conventions:
-      <skill-name>/
-        SKILL.md          (required - instructions + frontmatter)
-        scripts/           (optional - copied if exists)
-        references/        (optional - copied if exists)
-        assets/            (optional - copied if exists)
+_ANTIGRAVITY_REPLACEMENTS: list[tuple[str, str]] = [
+    # Tool references
+    (r"\buse the Read tool\b", "read the file"),
+    (r"\bUse the Read tool\b", "Read the file"),
+    (r"\buse the Edit tool\b", "edit the file"),
+    (r"\bUse the Edit tool\b", "Edit the file"),
+    (r"\buse the Write tool\b", "write the file"),
+    (r"\bUse the Write tool\b", "Write the file"),
+    (r"\buse the Bash tool\b", "run the command"),
+    (r"\bUse the Bash tool\b", "Run the command"),
+    (r"\buse the Grep tool\b", "search file contents"),
+    (r"\bUse the Grep tool\b", "Search file contents"),
+    (r"\buse the Glob tool\b", "find files by pattern"),
+    (r"\bUse the Glob tool\b", "Find files by pattern"),
+    (r"\buse the Agent tool\b", "dispatch a subtask"),
+    (r"\bUse the Agent tool\b", "Dispatch a subtask"),
+    (r"\buse the Skill tool\b", "invoke the skill"),
+    (r"\bUse the Skill tool\b", "Invoke the skill"),
+    # Config references
+    (r"\bCLAUDE\.md\b", "GEMINI.md"),
+    (r"\.claude/", ".agent/"),
+    # Claude-specific commands
+    (r"/compact\b", "compact the context"),
+    (r"\bTodoWrite\b", "task tracking"),
+    (r"\bTodoRead\b", "task reading"),
+    # Branding
+    (r"\bClaude Code\b", "Antigravity"),
+]
+
+
+def _adapt_skill_content(content: str, config_dir: str) -> str:
+    """Adapt Claude-specific skill content for the target platform."""
+    if config_dir == ".codex":
+        replacements = _CODEX_REPLACEMENTS
+    elif config_dir == ".antigravity":
+        replacements = _ANTIGRAVITY_REPLACEMENTS
+    else:
+        return content
+
+    for pattern, replacement in replacements:
+        content = re.sub(pattern, replacement, content)
+    return content
+
+
+def _convert_skill_for_target(src_dir: Path, dst_dir: Path, config_dir: str) -> None:
+    """Copy a skill to target format: <skill>/SKILL.md + optional subdirs.
+
+    Adapts Claude-specific content for the target platform and ensures
+    the directory structure matches platform conventions.
     """
     dst_dir.mkdir(parents=True, exist_ok=True)
 
     # Find the main skill markdown file
     skill_md = src_dir / "SKILL.md"
     if not skill_md.exists():
-        # Some ECC skills might use different names — find the first .md
         md_files = list(src_dir.glob("*.md"))
         if not md_files:
             return
@@ -119,13 +188,15 @@ def _convert_skill_for_codex(src_dir: Path, dst_dir: Path) -> None:
     # Read content and ensure proper frontmatter
     content = skill_md.read_text(encoding="utf-8", errors="ignore")
     if not content.startswith("---"):
-        # Add frontmatter from directory name
         name = src_dir.name
         content = f"---\nname: {name}\ndescription: {name} skill\n---\n\n{content}"
 
+    # Adapt Claude-specific content for target
+    content = _adapt_skill_content(content, config_dir)
+
     (dst_dir / "SKILL.md").write_text(content, encoding="utf-8")
 
-    # Copy optional subdirectories (Codex: references/, Antigravity: resources/)
+    # Copy optional subdirectories
     for subdir in ("scripts", "references", "resources", "assets", "examples"):
         src_sub = src_dir / subdir
         if src_sub.is_dir():
@@ -158,7 +229,7 @@ def copy_skills_to_project(
             continue
         dst = dest_skills / name
         if use_skill_md_format:
-            _convert_skill_for_codex(src, dst)
+            _convert_skill_for_target(src, dst, config_dir)
         else:
             shutil.copytree(src, dst, dirs_exist_ok=True)
         copied.append(name)
