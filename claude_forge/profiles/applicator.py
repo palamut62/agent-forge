@@ -76,11 +76,11 @@ def apply_profile(
         json.dumps(skill_profile, indent=2, ensure_ascii=False),
         interactive,
     )
-    copied = _copy_profile_skills(
+    from ..skill_fetcher import copy_skills_to_project
+    copied = copy_skills_to_project(
         project_path,
-        target_platform,
+        config_dir,
         profile.skills_include,
-        target_home=target_home,
     )
     if copied:
         console.print(f"  [green][OK][/green] Copied skills: {', '.join(copied)}")

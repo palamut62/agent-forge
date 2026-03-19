@@ -1,7 +1,6 @@
 """Generate Claude Code project structure from AI plan."""
 
 import json
-import shutil
 from pathlib import Path
 from rich.console import Console
 from rich.prompt import Confirm
@@ -261,11 +260,8 @@ def _copy_recommended_skills(
     target_platform,
     target_home: str | None,
 ) -> list[str]:
-    """Copy recommended global skills into project config dir."""
-    source_home = Path(target_home) if target_home else Path.home() / target_platform.default_home_dir
-    source_skills_dir = source_home / "skills"
-    if not source_skills_dir.exists():
-        return []
+    """Copy recommended skills from ECC cache into project."""
+    from .skill_fetcher import copy_skills_to_project
 
     raw = plan.get("recommended_skills", [])
     names: list[str] = []
@@ -275,36 +271,16 @@ def _copy_recommended_skills(
         else:
             name = str(entry).strip()
         if name:
-            names.append(name)
-            if ":" in name:
-                names.append(name.split(":")[-1].strip())
-            if "/" in name:
-                names.append(name.split("/")[-1].strip())
+            # Normalize plugin:name and org/name formats
+            clean = name.split(":")[-1].split("/")[-1].strip()
+            if clean and clean not in names:
+                names.append(clean)
 
-    unique_names: list[str] = []
-    seen: set[str] = set()
-    for name in names:
-        if name in seen:
-            continue
-        seen.add(name)
-        unique_names.append(name)
-
-    dest_skills_dir = project_path / target_platform.config_dir / "skills"
-    copied: list[str] = []
-    for name in unique_names:
-        src = source_skills_dir / name
-        if not src.is_dir():
-            continue
-        dst = dest_skills_dir / name
-        shutil.copytree(src, dst, dirs_exist_ok=True)
-        copied.append(name)
-
-    if not copied:
-        fallback = source_skills_dir / "learned"
-        if fallback.is_dir():
-            shutil.copytree(fallback, dest_skills_dir / "learned", dirs_exist_ok=True)
-            copied.append("learned")
-    return copied
+    return copy_skills_to_project(
+        project_path,
+        target_platform.config_dir,
+        names,
+    )
 
 
 def _update_gitignore(project_path: Path, target_platform) -> None:
