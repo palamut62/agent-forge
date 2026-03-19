@@ -89,55 +89,47 @@ def apply_profile(
 
 
 def _render_guide(profile: ProfileSchema, project_name: str, target_label: str) -> str:
-    sections = [f"# {project_name} -- {target_label} Guide\n"]
+    sections = [f"# {project_name}\n"]
 
+    # Compact single-line fields
+    meta_parts = []
     if profile.claude_md.role:
-        sections.append(f"## Your Role\n{profile.claude_md.role}\n")
-
-    if profile.claude_md.project_overview:
-        sections.append(f"## Project Overview\n{profile.claude_md.project_overview}\n")
-
+        meta_parts.append(profile.claude_md.role.strip())
     if profile.claude_md.tech_stack:
-        sections.append(f"## Tech Stack\n{profile.claude_md.tech_stack}\n")
+        meta_parts.append(f"**Stack:** {profile.claude_md.tech_stack.strip()}")
+    if meta_parts:
+        sections.append("\n".join(meta_parts) + "\n")
 
     if profile.claude_md.architecture:
-        sections.append(f"## Architecture\n{profile.claude_md.architecture}\n")
+        sections.append(f"## Architecture\n{profile.claude_md.architecture}")
 
     if profile.claude_md.coding_standards:
-        sections.append(f"## Coding Standards\n{profile.claude_md.coding_standards}\n")
+        sections.append(f"## Standards\n{profile.claude_md.coding_standards}")
 
     if profile.claude_md.hard_boundaries:
-        sections.append(f"## Hard Boundaries (NEVER Do These)\n{profile.claude_md.hard_boundaries}\n")
+        sections.append(f"## NEVER\n{profile.claude_md.hard_boundaries}")
     else:
         sections.append(
-            "## Hard Boundaries (NEVER Do These)\n"
-            "- .env dosyalarini ASLA duzenleme\n"
-            "- main/master branch'e direkt commit YAPMA\n"
-            "- Test olmadan yeni ozellik ekleme\n"
-            "- Secret/password iceren degerleri hardcode yapma\n"
+            "## NEVER\n"
+            "- Edit .env files\n"
+            "- Push directly to main/master\n"
+            "- Add features without tests\n"
+            "- Hardcode secrets\n"
         )
 
     if profile.claude_md.error_handling:
-        sections.append(f"## Error Handling\n{profile.claude_md.error_handling}\n")
+        sections.append(f"## Error Handling\n{profile.claude_md.error_handling}")
 
+    # Commands on one line each
+    cmds = []
     if profile.claude_md.test_command:
-        sections.append(
-            f"## Test Commands\n```bash\n{profile.claude_md.test_command}\n```\n"
-        )
-
+        cmds.append(f"**Test:** `{profile.claude_md.test_command.strip()}`")
     if profile.claude_md.lint_command:
-        sections.append(
-            f"## Lint Commands\n```bash\n{profile.claude_md.lint_command}\n```\n"
-        )
+        cmds.append(f"**Lint:** `{profile.claude_md.lint_command.strip()}`")
+    if cmds:
+        sections.append("## Commands\n" + "\n".join(cmds) + "\n")
 
-    if profile.skills_include:
-        skills_text = "\n".join(f"- {s}" for s in profile.skills_include)
-        sections.append(f"## Recommended Skills\n{skills_text}\n")
-
-    sections.append(
-        "## Memory System\n"
-        "Read `memory/MEMORY.md` at the start of every session.\n"
-        "Update relevant memory files when discovering important findings.\n"
+    sections.append("## Memory\nRead `memory/MEMORY.md` at session start. `memory/brain.jsonl` is auto-maintained.\n"
     )
 
     for key, value in profile.claude_md.extra_sections.items():

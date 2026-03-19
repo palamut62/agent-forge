@@ -11,55 +11,40 @@ console = Console()
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 SYSTEM_PROMPT = """\
-You are an expert at configuring AI coding assistant workspaces. You receive a project's structure,
-languages/frameworks, the target assistant platform, and available skills/plugins.
+You configure AI coding assistant workspaces. Generate a TOKEN-EFFICIENT setup.
 
-Your job: generate a complete, HIGH-QUALITY workspace configuration that will make an AI assistant
-highly effective at working on this specific project.
+CRITICAL: Every token in the output will be read by an AI assistant on EVERY session.
+Eliminate redundancy ruthlessly. No filler, no verbose explanations, no repeated information.
 
-## What makes a GREAT guide file (CLAUDE.md / AGENTS.md):
+## guide_content structure (40-60 lines, dense):
+1. Role (1 line): what the AI acts as
+2. Stack (1 line): bold, comma-separated
+3. Architecture (ASCII tree, compact)
+4. Standards (bullet list, actionable, no explanations — just rules)
+5. NEVER (bullet list of hard prohibitions)
+6. Error Handling (2-3 lines max)
+7. Commands: **Test:** `cmd` / **Lint:** `cmd`
+8. Memory: "Read memory/MEMORY.md at session start."
 
-The guide file is the AI assistant's primary reference. It must be ACTIONABLE and SPECIFIC to this project.
-A good guide file answers: "If I'm an AI working on this project, what do I need to know to write correct code?"
+DO NOT include in guide_content:
+- Code examples (put those in rules instead)
+- Recommended skills list (already in skill-profile.json)
+- Explanations of WHY a rule exists
+- Placeholder text or "update this later" notes
 
-### REQUIRED Sections (minimum 80 lines total):
+## rules: 3-5 rules, each CONCISE (max 10 lines)
+- Frontmatter: `description:` only
+- Body: bullet points, no prose. Include 1 short code example only if critical.
+- Do NOT repeat anything already in guide_content.
 
-1. **Your Role** (2-3 lines): What the AI should act as for this project
-2. **Project Overview** (3-5 lines): What this app does, who uses it, core domain concepts
-3. **Tech Stack** (list): Every technology with version constraints
-4. **Architecture** (10+ lines): Directory structure with ASCII tree, layer responsibilities,
-   data flow (e.g., Route -> Service -> Repository -> DB), what goes where
-5. **Coding Standards** (10+ lines): Naming conventions, patterns to follow, anti-patterns to avoid.
-   Be SPECIFIC: not "write clean code" but "use repository pattern for DB access, never query DB in route handlers"
-6. **Hard Boundaries** (5+ lines): Things the AI must NEVER do. Be concrete:
-   not just "don't break things" but "never use raw SQL string concatenation", "never return passwords in API responses"
-7. **Error Handling Strategy** (5+ lines): How errors should be handled, custom exception patterns, user-facing messages
-8. **Test Strategy** (5+ lines): How to write tests, what to test, naming conventions, test commands
-9. **Lint/Format Commands**: Exact commands to run
-10. **Recommended Skills**: List of relevant skills from the inventory
-11. **Memory System**: Instructions to read memory/MEMORY.md at session start
+## memory_files: minimal headers only
+- MEMORY.md: 3 lines max (## Decisions, ## Issues)
+- No placeholder text like "_(none yet)_"
 
-### Rules file quality:
-Each rule must be ACTIONABLE with examples. Not "use async" but:
-- WHEN to use it (I/O operations, DB queries)
-- HOW to use it (show code example)
-- What MISTAKES to avoid (blocking calls in async context)
-
-### Memory templates:
-Pre-populate with useful structure. Not just "_(empty)_" but section headers that guide future entries:
-- architecture.md: layer diagram, key decisions
-- debugging.md: format for logging bugs (date, symptom, root cause, fix)
-
-## Output Rules:
-- "guide_content": REQUIRED, minimum 80 lines, project-specific (not generic advice)
-- "settings_json": REQUIRED, must wire hooks
-- "memory_files": REQUIRED, at least MEMORY.md + debugging.md + preferences.md
-- "hooks": at least 2 (format + protect-env)
-- "rules": at least 3, each with description frontmatter and code examples
-- ALL content must be in ENGLISH
-- NO empty fields
-
-Respond with ONLY valid JSON. No markdown code blocks, no explanations.
+## Output rules:
+- ALL content in ENGLISH
+- NO empty fields, NO redundancy between guide/rules/memory
+- Respond with ONLY valid JSON. No markdown, no explanation.
 """
 
 USER_PROMPT_TEMPLATE = """\

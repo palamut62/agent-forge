@@ -6,12 +6,12 @@ frameworks: []
 
 claude_md:
   coding_standards: |
-    - Type hints zorunlu (tum fonksiyon parametreleri ve donus tipleri)
-    - Fonksiyonlar max 30 satir, tek sorumluluk prensibi
-    - console.log/print birakma, logger kullan
-    - Degisken isimleri aciklayici olsun (x, tmp, data gibi genel isimler yasak)
-    - Magic number kullanma, sabitleri UPPER_SNAKE_CASE ile tanimla
-    - Tekrar eden kod bloklarini fonksiyona cek (DRY)
+    - Type hints on all function signatures
+    - Functions max 30 lines, single responsibility
+    - No print/console.log left behind, use logger
+    - Descriptive variable names, no x/tmp/data
+    - No magic numbers, use UPPER_SNAKE_CASE constants
+    - DRY: extract repeated code into functions
   test_command: ""
   lint_command: ""
 
@@ -21,7 +21,7 @@ hooks:
     matcher: "Edit|Write"
     command: |
       if [[ "$FILE_PATH" == *".env" ]] && [[ "$FILE_PATH" != *".env.example" ]]; then
-        echo '{"block": true, "message": "BLOCKED: .env dosyalari duzenlenemez."}' >&2
+        echo '{"block": true, "message": "BLOCKED: .env files are read-only."}' >&2
         exit 2
       fi
 
@@ -49,61 +49,31 @@ rules:
   - name: no-env-edit.md
     content: |
       ---
-      description: .env dosyalarini asla duzenleme
+      description: Never edit .env files
       globs: ["*.env", ".env.*"]
       ---
-      ## .env Korumasi
-      - .env dosyalarini ASLA duzenleme veya oluşturma
-      - Sadece .env.example duzenlenebilir (varsayilan degerlerle, gercek secret'lar olmadan)
-      - Yeni bir env degiskeni eklemen gerekirse: .env.example'a ekle ve kullaniciya bildir
-      - Secret/token/password iceren degerleri ASLA hardcode yapma
+      Never edit .env files. Only .env.example may be modified (with defaults, no real secrets).
 
   - name: git-safety.md
     content: |
       ---
-      description: Git guvenlik kurallari
+      description: Git safety rules
       ---
-      ## Git Kurallari
-      - main/master branch'e direkt push YAPMA
-      - Force push KULLANMA
-      - Commit oncesi lint ve test calistir, gecmezse commit yapma
-      - Commit mesajlari Turkce, imperative, kisa
-      - Her commit tek bir is yapsin (atomik commit)
-      - .env, credentials, key iceren dosyalari ASLA commit'leme
+      - No direct push to main/master
+      - No force push
+      - Run lint+test before commit
+      - Never commit .env, credentials, or key files
 
   - name: code-quality.md
     content: |
       ---
-      description: Genel kod kalitesi kurallari
+      description: Code quality rules
       ---
-      ## Kod Kalitesi
-      - Yeni dosya olusturmadan once mevcut dosyalarda cozum ara
-      - Over-engineering yapma, en basit cozumu uygula
-      - Kullanilmayan import, degisken, fonksiyon birakma
-      - TODO/FIXME birakiyorsan aciklama ekle
-      - Error handling: spesifik exception yakala, bare except YASAK
-      - Dosya basina tek sorumluluk, 300+ satir ise bol
-
-  - name: brain-usage.md
-    content: |
-      ---
-      description: Otomatik bellek sistemi kullanim kurallari
-      ---
-      ## Brain Sistemi
-      Bu projede `memory/brain.jsonl` otomatik tutulan bir islem gunlugudur.
-      Hook'lar tarafindan her tool kullanimi sonrasi guncellenir.
-
-      ### Icerigi
-      - error: Tespit edilen hatalar
-      - change: Dosya degisiklikleri (Edit/Write)
-      - command: Calistirilan bash komutlari
-      - compact: Context sikistirma oncesi ozet
-      - qa_warning: QA gate uyarilari
-
-      ### Nasil Kullanilir
-      - Session basinda brain.jsonl kontrol et, son hatalari incele
-      - Ayni hatayi tekrarlama
-      - Bu dosyayi ELLE DUZENLEME, hook'lar otomatik yonetir
+      - Search existing files before creating new ones
+      - No over-engineering, simplest solution first
+      - No unused imports/variables/functions
+      - Specific exception handling only, no bare except
+      - Split files over 300 lines
 
 skills_include: []
 skills_exclude: []
@@ -111,44 +81,14 @@ skills_exclude: []
 memory_templates:
   - name: MEMORY.md
     content: |
-      # Project Memory
-
-      Bu dosya her conversation basinda okunmali.
-
-      ## Otomatik Bellek
-      `memory/brain.jsonl` hook'lar tarafindan otomatik guncellenir.
-      Hatalar, degisiklikler ve komutlar otomatik kaydedilir.
-
-      ## Aktif Kararlar
-      _(Henuz karar yok)_
-
-      ## Bilinen Sorunlar
-      _(Henuz sorun yok)_
-
-      ## Dosya Indeksi
-      - memory/brain.jsonl -- Otomatik islem gunlugu
-      - memory/debugging.md -- Hata ayiklama notlari
-      - memory/preferences.md -- Calisma tercihleri
-
+      # Memory
+      Read this at session start. `memory/brain.jsonl` is auto-maintained by hooks.
+      ## Decisions
+      ## Known Issues
   - name: debugging.md
     content: |
-      # Debugging Log
-
-      Cozulen veya devam eden hatalar buraya kaydedilir.
-      Otomatik hata kayitlari icin: memory/brain.jsonl
-
-      ## Cozulen
-      _(Henuz kayit yok)_
-
-      ## Devam Eden
-      _(Henuz kayit yok)_
-
+      # Debug Log
+      Format: date | issue | root cause | fix
   - name: preferences.md
     content: |
-      # Calisma Tercihleri
-
-      ## Kod Stili
-      _(Henuz belirlenmedi)_
-
-      ## Kacinilmasi Gerekenler
-      _(Henuz belirlenmedi)_
+      # Preferences

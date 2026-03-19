@@ -112,7 +112,7 @@ def test_apply_profile_creates_structure(tmp_path):
 
     claude_md = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
     assert "FastAPI" in claude_md
-    assert "tdd-workflow" in claude_md
+    assert "async/await" in claude_md
 
 
 def test_apply_profile_writes_skill_profile(tmp_path):
