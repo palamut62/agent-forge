@@ -1,0 +1,303 @@
+version: 1
+name: swift_ios
+description: "Swift 6, SwiftUI, async/await, SwiftData ile iOS uygulama"
+extends: base
+languages: [swift]
+frameworks: [swiftui, swiftdata]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir iOS gelistiricisisin.
+    Temiz, performansli, modern Swift 6 ve SwiftUI kodu yazarsin.
+    Her degisiklikte Apple Human Interface Guidelines, guvenlik ve surdurulebilirlik onceligindir.
+  project_overview: |
+    Bu bir Swift 6 + SwiftUI tabanli native iOS uygulamasidir.
+    Structured concurrency (async/await, actors) ile asenkron islemler yapilir.
+    SwiftData ile yerel veri saklama, Observation framework ile state yonetimi saglanir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Swift 6, SwiftUI, SwiftData, Observation, async/await, Swift Testing, URLSession"
+  coding_standards: |
+    - Swift 6 strict concurrency checking aktif, Sendable uyumlulugu zorunlu
+    - SwiftUI View'lari kucuk tut, 50 satirdan buyuk View'i ayri dosyaya cikar
+    - @Observable macro kullan (@ObservableObject eski, tercih etme)
+    - async/await kullan, completion handler YAZMA (eski API'ler haric)
+    - Actor kullan, shared mutable state icin class + lock KULLANMA
+    - Guard-let ile erken cikis yap, nested if-let pyramid'i OLUSTURMA
+    - Naming: camelCase (degisken/fonksiyon), PascalCase (tip/protocol)
+    - Protocol-oriented programming tercih et, gereksiz class hierarchy KURMA
+    - Extension'larla fonksiyonaliteyi organize et (MARK comment ile grupla)
+    - Access control: varsayilan `private`, gerektiginde `internal`, `public` sadece API icin
+    - SwiftUI Preview her View icin tanimla (#Preview macro)
+    - String localization: `String(localized:)` kullan, hardcode string YAZMA
+    - Error tipi icin enum conform to `Error` protocol kullan
+  architecture: |
+    ```
+    ProjectName/
+    ├── App/
+    │   ├── ProjectNameApp.swift    # @main entry point
+    │   └── ContentView.swift       # Root view
+    ├── Features/
+    │   ├── Auth/
+    │   │   ├── Views/
+    │   │   │   ├── LoginView.swift
+    │   │   │   └── RegisterView.swift
+    │   │   ├── ViewModels/
+    │   │   │   └── AuthViewModel.swift
+    │   │   └── Models/
+    │   │       └── User.swift
+    │   └── Home/
+    │       ├── Views/
+    │       ├── ViewModels/
+    │       └── Models/
+    ├── Core/
+    │   ├── Network/
+    │   │   ├── APIClient.swift     # URLSession wrapper
+    │   │   ├── Endpoint.swift      # Endpoint tanimlari
+    │   │   └── NetworkError.swift  # Hata tipleri
+    │   ├── Storage/
+    │   │   └── DataModels.swift    # SwiftData @Model'leri
+    │   ├── Extensions/
+    │   │   └── View+Extensions.swift
+    │   └── Utilities/
+    │       └── Logger.swift
+    └── Shared/
+        ├── Components/             # Yeniden kullanilabilir View'lar
+        │   ├── LoadingView.swift
+        │   └── ErrorView.swift
+        └── Modifiers/              # Custom ViewModifier'lar
+            └── CardModifier.swift
+    ```
+  hard_boundaries: |
+    - Force unwrap (`!`) ASLA kullanma, guard-let veya optional binding kullan
+    - Main actor disinda UI guncelleme YAPMA
+    - API key'leri source code'a KOYMA, xcconfig veya Keychain kullan
+    - Completion handler YAZMA, async/await kullan (legacy API wrapper haric)
+    - `var` gereksiz kullanma, `let` mumkun olan her yerde tercih et
+    - Massive View Controller/View anti-pattern'i OLUSTURMA, parcala
+    - `.storyboard` veya `.xib` KULLANMA, sadece SwiftUI
+  error_handling: |
+    - Typed throws ile hata tipleri belirle (Swift 6)
+    - Do-catch ile hatalari yakala, kullaniciya Alert ile Turkce mesaj goster
+    - Result type kullan, ozellikle callback-based API'lerde
+    - Network hatalari icin retry ve timeout mekanizmasi kur
+    - @MainActor ile UI guncellemelerini ana thread'de yap
+    - Ornek:
+      ```swift
+      // Core/Network/NetworkError.swift
+      enum NetworkError: Error, LocalizedError {
+          case invalidURL
+          case serverError(statusCode: Int)
+          case decodingFailed
+          case noConnection
+
+          var errorDescription: String? {
+              switch self {
+              case .invalidURL: "Gecersiz URL"
+              case .serverError(let code): "Sunucu hatasi: \(code)"
+              case .decodingFailed: "Veri isleme hatasi"
+              case .noConnection: "Internet baglantisi yok"
+              }
+          }
+      }
+
+      // APIClient
+      actor APIClient {
+          func fetch<T: Decodable>(_ endpoint: Endpoint) async throws(NetworkError) -> T {
+              guard let url = endpoint.url else {
+                  throw .invalidURL
+              }
+              do {
+                  let (data, response) = try await URLSession.shared.data(from: url)
+                  guard let http = response as? HTTPURLResponse,
+                        (200...299).contains(http.statusCode) else {
+                      throw NetworkError.serverError(
+                          statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0
+                      )
+                  }
+                  return try JSONDecoder().decode(T.self, from: data)
+              } catch is DecodingError {
+                  throw .decodingFailed
+              } catch {
+                  throw .noConnection
+              }
+          }
+      }
+      ```
+  test_command: "swift test"
+  lint_command: "swiftlint lint --strict"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.swift ]]; then
+        swiftlint lint --path "$FILE_PATH" 2>/dev/null || true
+        swift-format format -i "$FILE_PATH" 2>/dev/null || true
+      fi
+
+rules:
+  - name: actor-isolation.md
+    content: |
+      ---
+      description: Swift 6 actor isolation ve concurrency kurallari
+      ---
+      ## Actor Isolation
+      - Shared mutable state icin `actor` kullan, class + lock KULLANMA
+      - UI islemleri `@MainActor` ile isaretle
+      - ViewModel'leri `@MainActor` ile isaretle (UI state yonetimi)
+      - Sendable protocol'une uyumlulugu sagla, non-sendable tipleri actor boundary'si icinde tut
+      - `nonisolated` keyword'unu bilingli kullan, varsayilan isolated'dir
+
+      ### Ornek
+      ```swift
+      // YANLIS - data race riski
+      class CacheManager {
+          var cache: [String: Data] = [:] // thread-safe degil!
+      }
+
+      // DOGRU - actor ile thread safety
+      actor CacheManager {
+          private var cache: [String: Data] = [:]
+
+          func get(_ key: String) -> Data? { cache[key] }
+          func set(_ key: String, data: Data) { cache[key] = data }
+      }
+
+      // ViewModel - MainActor
+      @MainActor @Observable
+      final class HomeViewModel {
+          var items: [Item] = []
+          var isLoading = false
+
+          func loadItems() async {
+              isLoading = true
+              defer { isLoading = false }
+              items = await apiClient.fetchItems()
+          }
+      }
+      ```
+
+  - name: swiftui-patterns.md
+    content: |
+      ---
+      description: SwiftUI best practice'leri
+      ---
+      ## SwiftUI Patterns
+      - View'lari kucuk ve tek sorumluluk ile tasarla
+      - @Observable ile state yonetimi (@ObservableObject eski, kullanma)
+      - Environment ile dependency injection yap
+      - Custom ViewModifier ile tekrar eden stil kodunu azalt
+      - Task modifier ile async islemleri baslat (.onAppear yerine .task kullan)
+
+      ### Ornek
+      ```swift
+      // Custom ViewModifier
+      struct CardModifier: ViewModifier {
+          func body(content: Content) -> some View {
+              content
+                  .padding()
+                  .background(.background)
+                  .clipShape(RoundedRectangle(cornerRadius: 12))
+                  .shadow(radius: 2)
+          }
+      }
+
+      extension View {
+          func cardStyle() -> some View { modifier(CardModifier()) }
+      }
+
+      // Kullanim
+      struct ItemListView: View {
+          var viewModel: ItemViewModel
+
+          var body: some View {
+              List(viewModel.items) { item in
+                  ItemRow(item: item)
+                      .cardStyle()
+              }
+              .task { await viewModel.loadItems() }
+              .refreshable { await viewModel.loadItems() }
+          }
+      }
+      ```
+
+  - name: concurrency.md
+    content: |
+      ---
+      description: Swift structured concurrency kurallari
+      ---
+      ## Structured Concurrency
+      - async/await kullan, completion handler YAZMA
+      - Paralel islemler icin `async let` veya `TaskGroup` kullan
+      - Task cancellation'i kontrol et: `Task.checkCancellation()`
+      - `withThrowingTaskGroup` ile paralel hata yonetimi yap
+      - Unstructured task (`Task { }`) sadece gercekten gerektiginde
+
+      ### Ornek
+      ```swift
+      // Paralel fetch
+      func loadDashboard() async throws -> Dashboard {
+          async let profile = apiClient.fetchProfile()
+          async let stats = apiClient.fetchStats()
+          async let notifications = apiClient.fetchNotifications()
+
+          return Dashboard(
+              profile: try await profile,
+              stats: try await stats,
+              notifications: try await notifications
+          )
+      }
+      ```
+
+skills_include:
+  - tdd-workflow
+  - mobile-patterns
+  - swift-patterns
+  - swiftui-patterns
+  - ios-patterns
+  - clean-architecture
+
+skills_exclude:
+  - "python-*"
+  - "golang-*"
+  - "rust-*"
+  - "kotlin-*"
+  - "flutter-*"
+  - "react-*"
+  - "vue-*"
+  - "django-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Feature Yapisi
+      Features/ altinda her feature kendi Views/ViewModels/Models yapisina sahip.
+
+      ## Concurrency Model
+      Actor isolation ve MainActor kullanim kararlari.
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: screens.md
+    content: |
+      # Ekran Listesi
+
+      ## Views ve Navigation
+      _(NavigationStack/NavigationSplitView yapisi)_
+
+      ## Data Models
+      _(SwiftData @Model tanimlari)_
+
+  - name: api-contracts.md
+    content: |
+      # API Sozlesmeleri
+
+      ## Endpoint'ler
+      _(API endpoint tanimlari)_
+
+      ## Codable Modeller
+      _(Request/Response Codable struct'lari)_

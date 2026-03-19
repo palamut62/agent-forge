@@ -1,0 +1,264 @@
+version: 1
+name: flutter
+description: "Flutter/Dart, BLoC/Riverpod ile cross-platform mobil uygulama"
+extends: base
+languages: [dart]
+frameworks: [flutter]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir Flutter gelistiricisisin.
+    Temiz, performansli, test edilebilir Dart kodu ve Flutter widget'lari yazarsin.
+    Her degisiklikte widget composition, state management ve platform uyumlulugu onceligindir.
+  project_overview: |
+    Bu bir Flutter tabanli cross-platform mobil uygulamadir.
+    Dart dili ile yazilir, iOS, Android (ve opsiyonel web/desktop) destekler.
+    State yonetimi BLoC veya Riverpod ile saglanir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Flutter 3.19+, Dart 3.3+, flutter_bloc/riverpod, freezed, go_router, dio, hive/drift"
+  coding_standards: |
+    - Dart strict analysis kurallari: `analysis_options.yaml` ile lint aktif
+    - `dynamic` tipi YASAK, explicit tip belirt veya generic kullan
+    - Widget'lari kucuk tut, 50 satirdan buyuk widget'i ayri dosyaya cikar
+    - const constructor kullan mumkun olan her yerde (performans)
+    - StatelessWidget tercih et, StatefulWidget sadece gercekten gerektiginde
+    - Build method icinde agir hesaplama YAPMA, initState veya BLoC/Provider'da yap
+    - Dosya isimleri snake_case: `user_profile_screen.dart`, `auth_bloc.dart`
+    - Class isimleri PascalCase: `UserProfileScreen`, `AuthBloc`
+    - Tek dosyada tek public class, private helper class'lar ayni dosyada olabilir
+    - Extension method'lari `extensions/` klasorunde topla
+    - Model class'lari icin freezed veya equatable kullan (immutability)
+    - Dependency injection icin get_it veya riverpod kullan, global degisken KULLANMA
+  architecture: |
+    ```
+    lib/
+    ├── main.dart                # App entry point
+    ├── app.dart                 # MaterialApp/Router config
+    ├── core/
+    │   ├── constants/           # Sabitler (colors, strings, dimensions)
+    │   ├── theme/               # ThemeData, text styles
+    │   ├── router/              # GoRouter config
+    │   ├── network/             # Dio client, interceptors
+    │   └── extensions/          # Dart extension methods
+    ├── features/
+    │   ├── auth/
+    │   │   ├── data/
+    │   │   │   ├── models/      # DTO, response modelleri
+    │   │   │   ├── datasources/ # Remote/local data source
+    │   │   │   └── repositories/# Repository implementation
+    │   │   ├── domain/
+    │   │   │   ├── entities/    # Domain entity'leri
+    │   │   │   ├── repositories/# Repository interface (abstract)
+    │   │   │   └── usecases/    # Use case'ler
+    │   │   └── presentation/
+    │   │       ├── bloc/        # BLoC/Cubit (veya provider)
+    │   │       ├── screens/     # Ekran widget'lari
+    │   │       └── widgets/     # Feature-specific widget'lar
+    │   └── home/
+    │       └── (ayni yapi)
+    └── shared/
+        ├── widgets/             # Paylasilabilen widget'lar
+        └── utils/               # Yardimci fonksiyonlar
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme, API key'leri `--dart-define` ile gecir
+    - `dynamic` tipi ASLA kullanma
+    - Build method icinde `setState` CAGIRMA
+    - Presentation katmanindan direkt data source'a ERISME (repository kullan)
+    - `print()` kullanma, `debugPrint()` veya logger kullan
+    - Widget tree'de gereksiz nesting YAPMA (max 5-6 seviye)
+    - pubspec.lock dosyasini SILME, commit'e dahil et
+  error_handling: |
+    - Either pattern ile hata yonetimi (dartz veya fpdart paketi)
+    - Dio interceptor ile global HTTP hata yakalama
+    - BLoC'ta hata state'i tanimla, UI'da kullaniciya Turkce mesaj goster
+    - Try-catch'te spesifik exception yakala, bare `catch(e)` KULLANMA
+    - Network hatalari icin retry mekanizmasi kur
+    - Ornek:
+      ```dart
+      // domain/failures.dart
+      sealed class Failure {
+        final String message;
+        const Failure(this.message);
+      }
+
+      class ServerFailure extends Failure {
+        const ServerFailure([super.message = "Sunucu hatasi olustu"]);
+      }
+
+      class NetworkFailure extends Failure {
+        const NetworkFailure([super.message = "Internet baglantisi yok"]);
+      }
+
+      // BLoC hata yonetimi
+      Future<void> _onLogin(LoginEvent event, Emitter<AuthState> emit) async {
+        emit(AuthLoading());
+        final result = await loginUseCase(event.credentials);
+        result.fold(
+          (failure) => emit(AuthError(failure.message)),
+          (user) => emit(AuthAuthenticated(user)),
+        );
+      }
+      ```
+  test_command: "flutter test --coverage"
+  lint_command: "dart analyze && dart format lib/ test/"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.dart ]]; then
+        dart format "$FILE_PATH" 2>/dev/null
+        dart analyze "$FILE_PATH" 2>/dev/null || true
+      fi
+
+rules:
+  - name: widget-composition.md
+    content: |
+      ---
+      description: Flutter widget composition kurallari
+      ---
+      ## Widget Composition
+      - Widget'lari kucuk ve tek sorumluluk ile tasarla
+      - 50 satirdan buyuk build method'u parcala
+      - const constructor kullan, gereksiz rebuild'leri onle
+      - StatelessWidget > StatefulWidget > ConsumerWidget siralamasinda tercih et
+      - Widget'lari method ile degil, ayri class ile cikar (rebuild optimizasyonu)
+
+      ### Ornek
+      ```dart
+      // YANLIS - method ile widget cikarma (rebuild sorunu)
+      class MyScreen extends StatelessWidget {
+        Widget _buildHeader() => Container(...); // her build'de yeniden olusur
+
+        @override
+        Widget build(BuildContext context) => _buildHeader();
+      }
+
+      // DOGRU - ayri widget class
+      class ScreenHeader extends StatelessWidget {
+        const ScreenHeader({super.key});
+
+        @override
+        Widget build(BuildContext context) {
+          return Container(...);
+        }
+      }
+      ```
+
+  - name: state-management.md
+    content: |
+      ---
+      description: Flutter state management kurallari
+      ---
+      ## State Management (BLoC/Riverpod)
+      - Global state icin BLoC/Cubit veya Riverpod provider kullan
+      - Local UI state (animation, form input) icin StatefulWidget yeterli
+      - Event/State class'lari freezed ile olustur (sealed class da olur)
+      - BLoC'ta side effect'ler icin listener kullan, builder sadece UI icin
+      - State'leri immutable tut, copyWith ile guncellemeler yap
+
+      ### Ornek (BLoC)
+      ```dart
+      // events
+      sealed class AuthEvent {}
+      class LoginRequested extends AuthEvent {
+        final String email;
+        final String password;
+        LoginRequested({required this.email, required this.password});
+      }
+
+      // states
+      sealed class AuthState {}
+      class AuthInitial extends AuthState {}
+      class AuthLoading extends AuthState {}
+      class AuthAuthenticated extends AuthState {
+        final User user;
+        AuthAuthenticated(this.user);
+      }
+      class AuthError extends AuthState {
+        final String message;
+        AuthError(this.message);
+      }
+      ```
+
+  - name: platform-channels.md
+    content: |
+      ---
+      description: Platform channel ve native kod entegrasyonu
+      ---
+      ## Platform Channels
+      - MethodChannel ile platform-specific kod cagir
+      - Channel isimleri reverse domain: `com.app.name/channel_name`
+      - Codec olarak StandardMessageCodec yeterli, gerekirse custom codec yaz
+      - Platform tarafinda hata firlatirsa FlutterError olarak yakala
+      - Federated plugin yapisi ile platform kodunu ayir
+
+      ### Ornek
+      ```dart
+      class BatteryService {
+        static const _channel = MethodChannel("com.app/battery");
+
+        Future<int> getBatteryLevel() async {
+          try {
+            final level = await _channel.invokeMethod<int>("getBatteryLevel");
+            return level ?? -1;
+          } on PlatformException catch (e) {
+            debugPrint("Pil seviyesi alinamadi: ${e.message}");
+            return -1;
+          }
+        }
+      }
+      ```
+
+skills_include:
+  - tdd-workflow
+  - mobile-patterns
+  - flutter-patterns
+  - dart-patterns
+  - clean-architecture
+
+skills_exclude:
+  - "python-*"
+  - "golang-*"
+  - "rust-*"
+  - "springboot-*"
+  - "django-*"
+  - "react-*"
+  - "vue-*"
+  - "nextjs-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Feature Yapisi
+      Clean Architecture: Data -> Domain -> Presentation
+
+      ## State Management
+      BLoC/Riverpod kullanim kararlari.
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: screens.md
+    content: |
+      # Ekran Listesi
+
+      ## Ekranlar ve Route'lar
+      _(GoRouter route tanimlari)_
+
+      ## Navigation Flow
+      _(Ekranlar arasi gecis akislari)_
+
+  - name: packages.md
+    content: |
+      # Paket Envanteri
+
+      ## Kullanilan Paketler
+      _(pubspec.yaml'daki paketler ve kullanim amaci)_
+
+      ## Platform Channels
+      _(Native entegrasyon gereken ozellikler)_

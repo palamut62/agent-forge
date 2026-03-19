@@ -1,0 +1,270 @@
+version: 1
+name: golang
+description: "Go 1.22+, standard library, chi/gin/echo web framework"
+extends: base
+languages: [go]
+frameworks: [chi, gin]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir Go gelistiricisisin.
+    Temiz, idiomatik, performansli ve test edilebilir Go kodu yazarsin.
+    Her degisiklikte simplicity, error handling ve concurrency safety onceligindir.
+  project_overview: |
+    Bu bir Go tabanli backend servis/API projesidir.
+    Standard library agirlikli, gerektiginde chi/gin/echo gibi hafif framework kullanilir.
+    Concurrency icin goroutine ve channel pattern'leri uygulanir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Go 1.22+, chi/gin/echo, sqlx/pgx, slog, testify, golangci-lint"
+  coding_standards: |
+    - Idiomatic Go yaz: kisa degisken isimleri (i, ok, err), receiver isimleri tek harf
+    - Error'lari HER ZAMAN kontrol et, `_` ile error'u gormezden GELME
+    - `panic()` KULLANMA, error don (panic sadece gercekten kurtarilamaz durumlarda)
+    - Interface'leri consumer tarafinda tanimla, producer tarafinda DEGIL
+    - Kucuk interface tercih et: 1-2 method (io.Reader, io.Writer gibi)
+    - Context'i ilk parametre olarak gecir: `func DoSomething(ctx context.Context, ...)`
+    - Struct field'lari exported (PascalCase) veya unexported (camelCase) tutarli olsun
+    - Package isimleri kisa, tek kelime, lowercase: `user`, `auth`, `db`
+    - `init()` fonksiyonundan kacin, explicit initialization tercih et
+    - Table-driven test yaz, her case icin ayri test fonksiyonu YAZMA
+    - `go vet` ve `golangci-lint` ile kod kalitesini kontrol et
+    - Dependency injection icin interface kullan, framework gereksiz
+  architecture: |
+    ```
+    project/
+    ├── cmd/
+    │   └── server/
+    │       └── main.go           # Entry point, wire-up
+    ├── internal/
+    │   ├── config/
+    │   │   └── config.go         # Environment config
+    │   ├── handler/
+    │   │   ├── user.go           # HTTP handler'lar
+    │   │   └── middleware.go     # HTTP middleware'ler
+    │   ├── service/
+    │   │   └── user.go           # Business logic
+    │   ├── repository/
+    │   │   ├── user.go           # Repository interface + impl
+    │   │   └── postgres.go       # DB connection
+    │   ├── model/
+    │   │   └── user.go           # Domain modelleri
+    │   └── dto/
+    │       └── user.go           # Request/Response DTO'lari
+    ├── pkg/
+    │   ├── validator/            # Validation helpers
+    │   └── httputil/             # HTTP utility'ler
+    ├── migrations/               # SQL migration dosyalari
+    ├── go.mod
+    ├── go.sum
+    └── Makefile
+    ```
+  hard_boundaries: |
+    - `panic()` ASLA uretim kodunda kullanma (sadece init-time unrecoverable icin)
+    - Error'lari `_` ile GORMEZDEN GELME, handle et veya wrap et
+    - Global mutable state KULLANMA, dependency injection yap
+    - `init()` fonksiyonundan KACIN, explicit setup tercih et
+    - `interface{}` (any) gereksiz kullanma, generic veya concrete tip kullan
+    - Race condition: shared state'e goroutine'lerden mutex olmadan ERISME
+    - Vendor dizinini COMMIT etme (go.mod/go.sum yeterli)
+  error_handling: |
+    - Error'lari `fmt.Errorf("context: %w", err)` ile wrap et
+    - Custom error tipleri tanimla, `errors.Is()` ve `errors.As()` ile kontrol et
+    - Sentinel error'lar package seviyesinde: `var ErrNotFound = errors.New("bulunamadi")`
+    - HTTP handler'larda error'u middleware'de merkezi handle et
+    - Goroutine'lerde panic recovery icin `defer recover()` kullan
+    - Ornek:
+      ```go
+      // internal/model/errors.go
+      var (
+          ErrNotFound     = errors.New("kayit bulunamadi")
+          ErrUnauthorized = errors.New("yetkisiz erisim")
+          ErrConflict     = errors.New("kayit zaten mevcut")
+      )
+
+      // internal/service/user.go
+      func (s *UserService) GetByID(ctx context.Context, id string) (*User, error) {
+          user, err := s.repo.FindByID(ctx, id)
+          if err != nil {
+              if errors.Is(err, repository.ErrNoRows) {
+                  return nil, fmt.Errorf("kullanici %s: %w", id, ErrNotFound)
+              }
+              return nil, fmt.Errorf("kullanici sorgulama: %w", err)
+          }
+          return user, nil
+      }
+
+      // internal/handler/middleware.go
+      func ErrorHandler(next http.Handler) http.Handler {
+          return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+              defer func() {
+                  if rec := recover(); rec != nil {
+                      slog.Error("panic yakalandi", "error", rec)
+                      http.Error(w, "Sunucu hatasi", http.StatusInternalServerError)
+                  }
+              }()
+              next.ServeHTTP(w, r)
+          })
+      }
+      ```
+  test_command: "go test ./... -v -race -cover"
+  lint_command: "golangci-lint run ./..."
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.go ]]; then
+        gofmt -w "$FILE_PATH" 2>/dev/null
+        go vet ./... 2>/dev/null || true
+      fi
+
+rules:
+  - name: error-handling.md
+    content: |
+      ---
+      description: Go error handling kurallari
+      ---
+      ## Error Handling
+      - HER error'u kontrol et, `_` ile atlama
+      - Error'lari context ile wrap et: `fmt.Errorf("islem: %w", err)`
+      - Sentinel error'lar icin `errors.Is()`, type check icin `errors.As()` kullan
+      - `panic()` kullanma, error don
+      - Early return pattern: hata varsa hemen don, happy path son satirda
+
+      ### Ornek
+      ```go
+      // YANLIS
+      result, _ := doSomething() // error gormezden geliniyor!
+
+      // DOGRU
+      result, err := doSomething()
+      if err != nil {
+          return fmt.Errorf("islem basarisiz: %w", err)
+      }
+      ```
+
+  - name: interface-patterns.md
+    content: |
+      ---
+      description: Go interface tasarim kurallari
+      ---
+      ## Interface Patterns
+      - Interface'leri CONSUMER tarafinda tanimla (producer degil)
+      - Kucuk interface: 1-2 method yeterli, buyuk interface OLUSTURMA
+      - Accept interfaces, return structs
+      - Interface satisfaction implicit, `implements` keyword yok
+      - Mock icin interface kullan, test'lerde kolaylik saglar
+
+      ### Ornek
+      ```go
+      // YANLIS - producer tarafinda buyuk interface
+      type UserRepository interface {
+          FindByID(ctx context.Context, id string) (*User, error)
+          FindAll(ctx context.Context) ([]*User, error)
+          Create(ctx context.Context, u *User) error
+          Update(ctx context.Context, u *User) error
+          Delete(ctx context.Context, id string) error
+      }
+
+      // DOGRU - consumer'in ihtiyacina gore kucuk interface
+      // service/user.go
+      type UserFinder interface {
+          FindByID(ctx context.Context, id string) (*User, error)
+      }
+
+      type UserCreator interface {
+          Create(ctx context.Context, u *User) error
+      }
+      ```
+
+  - name: concurrency.md
+    content: |
+      ---
+      description: Go concurrency kurallari
+      ---
+      ## Concurrency
+      - "Don't communicate by sharing memory; share memory by communicating"
+      - Channel'lari goroutine'ler arasi iletisim icin kullan
+      - `sync.Mutex` sadece basit shared state icin, karmasik durumda channel tercih et
+      - `sync.WaitGroup` ile goroutine'lerin bitmesini bekle
+      - `context.Context` ile cancellation ve timeout yonet
+      - Goroutine leak'lerden kacin: her goroutine'nin durma kosulu olmali
+      - `errgroup.Group` ile paralel islem + hata yonetimi yap
+
+      ### Ornek
+      ```go
+      func fetchAll(ctx context.Context, urls []string) ([]Result, error) {
+          g, ctx := errgroup.WithContext(ctx)
+          results := make([]Result, len(urls))
+
+          for i, url := range urls {
+              g.Go(func() error {
+                  res, err := fetch(ctx, url)
+                  if err != nil {
+                      return fmt.Errorf("fetch %s: %w", url, err)
+                  }
+                  results[i] = res
+                  return nil
+              })
+          }
+
+          if err := g.Wait(); err != nil {
+              return nil, err
+          }
+          return results, nil
+      }
+      ```
+
+skills_include:
+  - tdd-workflow
+  - security-review
+  - golang-patterns
+  - docker-patterns
+  - backend-patterns
+  - database-patterns
+
+skills_exclude:
+  - "python-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "rust-*"
+  - "flutter-*"
+  - "react-*"
+  - "vue-*"
+  - "django-*"
+  - "springboot-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Katman Yapisi
+      Handler -> Service -> Repository -> Database
+
+      ## Package Yapisi
+      _(internal/ ve pkg/ altindaki paketler)_
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: api-contracts.md
+    content: |
+      # API Sozlesmeleri
+
+      ## Endpoint Listesi
+      _(HTTP method, path, handler)_
+
+      ## DTO'lar
+      _(Request/Response struct'lari)_
+
+  - name: database-schema.md
+    content: |
+      # Veritabani Semasi
+
+      ## Tablolar
+      _(SQL migration'lari ile olusturulan tablolar)_
+
+      ## Index'ler
+      _(Performans icin eklenen index'ler)_

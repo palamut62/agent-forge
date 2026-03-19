@@ -6,18 +6,204 @@ languages: [python]
 frameworks: []
 
 claude_md:
-  tech_stack: "Python 3.12, click/typer, rich"
+  role: |
+    Sen bu projede calisan kidemli bir Python gelistiricisisin, CLI arac gelistirme uzmanisin.
+    Temiz, kullanici dostu, iyi dokumante edilmis CLI uygulamalari yazarsin.
+    Her degisiklikte kullanilabilirlik, hata mesajlari ve help dokumantasyonu onceligindir.
+  project_overview: |
+    Bu bir Python CLI uygulamasidir.
+    Typer/Click framework'u ile komut yapisi, Rich ile guzel terminal ciktisi kullanir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Python 3.12, typer/click, rich, pydantic, httpx, pathlib"
   coding_standards: |
-    - Her komut icin --help dokumantasyonu
-    - Exit code'lari duzgun kullan (0=ok, 1=error)
-    - Rich ile guzel cikti
-  test_command: "pytest tests/ -v"
+    - Type hints zorunlu (typer bunlari CLI argumanlarina cevirir)
+    - Her komut icin --help aciklamasi ZORUNLU (docstring veya help parametresi)
+    - Rich kullan: tablo, progress bar, panel, syntax highlighting
+    - Exit code'lari dogru kullan: 0=basarili, 1=genel hata, 2=kullanim hatasi
+    - Buyuk ciktilar icin pager kullan (rich.console.Console(pager=True))
+    - Interaktif onay gerekiyorsa typer.confirm() / click.confirm() kullan
+    - Config dosyasi: ~/.config/<app>/ altinda, TOML veya YAML formatinda
+    - Verbose/quiet flag'leri global olarak tanimla (--verbose, -v, --quiet, -q)
+    - stdin/stdout pipe destegi olsun (pipe edildiginde renk/emoji kapatilir)
+    - Hata mesajlari stderr'e yazilsin, cikti stdout'a
+  architecture: |
+    ```
+    src/
+    ├── cli/
+    │   ├── __init__.py          # Ana typer.Typer() app
+    │   ├── main.py              # Entry point, app tanimi, global callback'ler
+    │   ├── commands/
+    │   │   ├── __init__.py
+    │   │   ├── <command>.py     # Her komut grubu icin ayri dosya
+    │   │   └── <command>.py
+    │   └── callbacks.py         # Version callback, verbose callback
+    ├── core/
+    │   ├── config.py            # Config yukle/kaydet (pydantic Settings)
+    │   ├── models.py            # Veri modelleri
+    │   └── <logic>.py           # Is mantigi
+    ├── output/
+    │   ├── formatters.py        # Rich tablo, panel formatters
+    │   ├── styles.py            # Tema ve renk tanimlari
+    │   └── console.py           # Console instance, stderr/stdout ayirimi
+    ├── utils/
+    │   └── helpers.py
+    ├── exceptions.py            # Custom exception'lar
+    └── __main__.py              # python -m <app> destegi
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme
+    - Kullanici onaysiz dosya silme/uzerine yazma YAPMA
+    - stdin'den veri okunurken timeout koymadan bekleme
+    - Hata durumunda exit code 0 dondurme (her zaman dogru exit code)
+    - Global state veya mutable default argument kullanma
+    - Secret'lari CLI ciktisina yazdirma (maskele)
+    - Progress bar olmadan uzun sureli islem baslatma
+  error_handling: |
+    - Custom exception'lar exceptions.py'de tanimla
+    - Hata mesajlari Turkce, anlasilir ve aksiyon onerir (ne yapmali)
+    - Hatalar stderr'e yazilsin (rich.console.Console(stderr=True))
+    - Her exit code'un anlami dokumante edilmeli
+    - Dosya bulunamadi, izin hatasi, network hatasi gibi yaygın hatalari ozel handle et
+    - KeyboardInterrupt (Ctrl+C) temiz handle et
+    - Ornek:
+      ```python
+      import typer
+      from rich.console import Console
+
+      err_console = Console(stderr=True)
+
+      @app.command()
+      def process(file: Path = typer.Argument(..., help="Islenecek dosya yolu")) -> None:
+          """Dosyayi isle ve sonuclari goster."""
+          if not file.exists():
+              err_console.print(f"[red]Hata:[/red] '{file}' dosyasi bulunamadi.")
+              raise typer.Exit(code=1)
+          try:
+              result = core.process_file(file)
+              console.print(result.to_table())
+          except PermissionError:
+              err_console.print(f"[red]Hata:[/red] '{file}' dosyasina erisim izni yok.")
+              raise typer.Exit(code=1)
+          except KeyboardInterrupt:
+              err_console.print("\n[yellow]Islem iptal edildi.[/yellow]")
+              raise typer.Exit(code=130)
+      ```
+  test_command: "pytest tests/ -v --tb=short"
   lint_command: "ruff check --fix && ruff format"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.py ]]; then
+        ruff format "$FILE_PATH" 2>/dev/null
+        ruff check --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: exit-codes.md
+    content: |
+      ---
+      description: CLI exit code kurallari
+      ---
+      ## Exit Code Kurallari
+      - 0: Basarili
+      - 1: Genel hata (runtime error, islem basarisiz)
+      - 2: Kullanim hatasi (yanlis arguman, eksik parametre)
+      - 130: Ctrl+C ile iptal (KeyboardInterrupt)
+      - Her exit code'u dokumante et
+      - Basarili islemlerde ASLA 0 disinda kod dondurme
+      - Hata durumunda ASLA 0 dondurme
+
+      ### Ornek
+      ```python
+      # YANLIS
+      try:
+          process()
+      except Exception:
+          print("Hata olustu")
+          # exit code 0 ile cikiyor - YANLIS!
+
+      # DOGRU
+      try:
+          process()
+      except FileNotFoundError as e:
+          err_console.print(f"[red]Hata:[/red] Dosya bulunamadi: {e}")
+          raise typer.Exit(code=1)
+      except typer.BadParameter as e:
+          err_console.print(f"[red]Kullanim hatasi:[/red] {e}")
+          raise typer.Exit(code=2)
+      ```
+
+  - name: help-text.md
+    content: |
+      ---
+      description: CLI yardim metni kurallari
+      ---
+      ## Help Text Kurallari
+      - Her komut icin docstring ZORUNLU (typer bunu --help'e cevirir)
+      - Her arguman ve option icin `help=` parametresi ZORUNLU
+      - Epilog ile ornek kullanim goster
+      - Komut gruplari icin kisa aciklama ekle
+      - Help metinleri Turkce olsun
+
+      ### Ornek
+      ```python
+      @app.command(epilog="Ornek: myapp convert input.csv --format json -o output.json")
+      def convert(
+          input_file: Path = typer.Argument(..., help="Donusturulecek kaynak dosya"),
+          format: str = typer.Option("json", "--format", "-f", help="Cikti formati (json, csv, yaml)"),
+          output: Path | None = typer.Option(None, "--output", "-o", help="Cikti dosyasi (belirtilmezse stdout)"),
+          verbose: bool = typer.Option(False, "--verbose", "-v", help="Detayli cikti goster"),
+      ) -> None:
+          """Dosyayi belirtilen formata donusturur.
+
+          Desteklenen formatlar: json, csv, yaml.
+          Cikti dosyasi belirtilmezse sonuc stdout'a yazilir.
+          """
+          ...
+      ```
+
+  - name: input-validation.md
+    content: |
+      ---
+      description: CLI girdi dogrulama kurallari
+      ---
+      ## Input Validation Kurallari
+      - Dosya yolu argumanlari icin `typer.Argument(exists=True)` veya elle kontrol
+      - Enum degerleri icin `typer.Option(case_sensitive=False)` kullan
+      - Sayi araliklari icin `typer.Option(min=0, max=100)` kullan
+      - Ozel validasyon icin callback kullan
+      - Hatali girdide anlasilir hata mesaji ver ve dogru kullanimi goster
+
+      ### Ornek
+      ```python
+      class OutputFormat(str, Enum):
+          JSON = "json"
+          CSV = "csv"
+          YAML = "yaml"
+
+      def validate_port(value: int) -> int:
+          if not 1 <= value <= 65535:
+              raise typer.BadParameter(f"Port 1-65535 arasinda olmali, verilen: {value}")
+          return value
+
+      @app.command()
+      def serve(
+          port: int = typer.Option(8000, callback=validate_port, help="Dinlenecek port"),
+          format: OutputFormat = typer.Option(OutputFormat.JSON, help="Cikti formati"),
+      ) -> None:
+          """Yerel sunucu baslat."""
+          ...
+      ```
 
 skills_include:
   - python-review
   - python-patterns
+  - python-testing
   - tdd-workflow
+  - security-review
 
 skills_exclude:
   - "threejs-*"
@@ -25,4 +211,53 @@ skills_exclude:
   - "swift-*"
   - "golang-*"
   - "frontend-*"
+  - "react-*"
   - "springboot-*"
+  - "jpa-*"
+  - "django-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # CLI Mimari Kararlar
+
+      ## Komut Yapisi
+      ```
+      myapp
+      ├── komut-1          # Aciklama
+      ├── komut-2          # Aciklama
+      └── grup
+          ├── alt-komut-1  # Aciklama
+          └── alt-komut-2  # Aciklama
+      ```
+
+      ## Exit Codes
+      | Kod | Anlam |
+      |-----|-------|
+      | 0   | Basarili |
+      | 1   | Genel hata |
+      | 2   | Kullanim hatasi |
+      | 130 | Ctrl+C |
+
+      ## Config
+      - Konum: ~/.config/<app>/config.toml
+      - Format: TOML
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: command-registry.md
+    content: |
+      # Komut Kayit Defteri
+
+      ## Komutlar
+      | Komut | Arguman | Options | Aciklama |
+      |-------|---------|---------|----------|
+      _(Her yeni komut eklendikce buraya yazilir)_
+
+      ## Global Options
+      | Option | Kisa | Varsayilan | Aciklama |
+      |--------|------|------------|----------|
+      | --verbose | -v | False | Detayli cikti |
+      | --quiet | -q | False | Sessiz mod |
+      | --config | -c | ~/.config/... | Config dosyasi |

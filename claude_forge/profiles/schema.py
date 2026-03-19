@@ -7,7 +7,8 @@ class HookEntry(BaseModel):
     name: str
     event: str = "PostToolUse"
     matcher: str = "Edit|Write"
-    command: str
+    command: str = ""
+    bundled: bool = False
 
 
 class RuleEntry(BaseModel):
@@ -21,8 +22,13 @@ class MemoryTemplate(BaseModel):
 
 
 class ClaudeMdConfig(BaseModel):
+    role: str = ""
+    project_overview: str = ""
     tech_stack: str = ""
     coding_standards: str = ""
+    architecture: str = ""
+    hard_boundaries: str = ""
+    error_handling: str = ""
     test_command: str = ""
     lint_command: str = ""
     extra_sections: dict[str, str] = Field(default_factory=dict)

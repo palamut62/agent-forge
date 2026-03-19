@@ -1,0 +1,21 @@
+{
+  "name": "agent-forge",
+  "version": "0.3.0",
+  "description": "Agent Forge launcher with multi-target CLI TUI",
+  "type": "module",
+  "bin": {
+    "agent-forge": "./bin/claude-forge.js",
+    "claude-forge": "./bin/claude-forge.js"
+  },
+  "scripts": {
+    "start": "node ./bin/claude-forge.js",
+    "lint": "node -e \"console.log('No JS lint configured yet')\""
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "ink": "^5.2.1",
+    "react": "^18.3.1"
+  }
+}

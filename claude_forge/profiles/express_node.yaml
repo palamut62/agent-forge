@@ -1,0 +1,297 @@
+version: 1
+name: express_node
+description: "Node.js + Express/Fastify, TypeScript ile backend API"
+extends: base
+languages: [typescript, javascript]
+frameworks: [express, fastify, node]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir Node.js backend gelistiricisisin.
+    Temiz, tip-guvenli, olceklenebilir TypeScript + Express/Fastify kodu yazarsin.
+    Her degisiklikte guvenlik, hata yonetimi ve performans onceligindir.
+  project_overview: |
+    Bu bir Node.js + Express/Fastify tabanli REST API projesidir.
+    TypeScript ile yazilir, Zod ile request validation yapilir.
+    Katmanli mimari (Router-Controller-Service-Repository) ile yapilandirilmistir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Node.js 20+, Express/Fastify, TypeScript 5, Zod, Prisma/Drizzle, Jest/Vitest, pino/winston"
+  coding_standards: |
+    - TypeScript strict mode zorunlu, `any` tipi YASAK
+    - Async handler'larda error'u MUTLAKA catch et (express-async-errors veya wrapper)
+    - Request body validation: Zod schema ile, type'i `z.infer<typeof schema>` ile cikar
+    - Environment variable'lari Zod ile validate et (type-safe config)
+    - Middleware'leri ayri dosyalarda tanimla, app.ts'de register et
+    - Route handler'larda business logic YAZMA, service'e delege et
+    - HTTP status code'lari dogru kullan: 201, 204, 400, 401, 404, 409, 422, 500
+    - Response format tutarli olsun: `{ data: T }` veya `{ error: string, details?: unknown }`
+    - ESM import kullan (`import`), CommonJS (`require`) KULLANMA
+    - Dosya isimleri kebab-case: `user-controller.ts`, `auth-middleware.ts`
+    - Singleton pattern: database client, logger vb. tek instance
+    - Graceful shutdown: SIGTERM/SIGINT handle et, acik connection'lari kapat
+  architecture: |
+    ```
+    src/
+    ├── index.ts                  # Entry point, server start
+    ├── app.ts                    # Express/Fastify app, middleware setup
+    ├── config/
+    │   └── env.ts                # Zod ile environment validation
+    ├── routes/
+    │   ├── index.ts              # Route registration
+    │   └── user.routes.ts        # User route tanimlari
+    ├── controllers/
+    │   └── user.controller.ts    # Request/response handle
+    ├── services/
+    │   └── user.service.ts       # Business logic
+    ├── repositories/
+    │   └── user.repository.ts    # Database islemleri
+    ├── middleware/
+    │   ├── error-handler.ts      # Global error handler
+    │   ├── auth.ts               # JWT authentication
+    │   ├── validate.ts           # Zod validation middleware
+    │   └── rate-limit.ts         # Rate limiting
+    ├── models/
+    │   └── user.model.ts         # Prisma/Drizzle model
+    ├── schemas/
+    │   └── user.schema.ts        # Zod validation schemalari
+    ├── types/
+    │   └── index.ts              # Global type tanimlari
+    └── utils/
+        ├── logger.ts             # Logger setup (pino/winston)
+        └── errors.ts             # Custom error class'lari
+    ```
+  hard_boundaries: |
+    - `any` tipi ASLA kullanma
+    - `require()` KULLANMA, ESM `import` kullan
+    - Route handler'da try-catch olmadan async KULLANMA (unhandled rejection)
+    - SQL query'leri string concatenation ile OLUSTURMA (SQL injection)
+    - Secret'lari source code'a KOYMA, `.env` ve config modulu kullan
+    - `console.log` uretim kodunda KULLANMA, logger kullan
+    - `node_modules/` ve `dist/` dizinlerini COMMIT etme
+  error_handling: |
+    - Custom error class'lari hierarchy olustur (AppError -> NotFoundError, ValidationError)
+    - Global error handler middleware'i son middleware olarak register et
+    - Async error'lari otomatik yakala (express-async-errors veya custom wrapper)
+    - Operational error vs programmer error ayir: operational log + response, programmer crash + restart
+    - Unhandled rejection ve uncaught exception handler'lari tanimla
+    - Ornek:
+      ```typescript
+      // utils/errors.ts
+      export class AppError extends Error {
+        constructor(
+          public statusCode: number,
+          message: string,
+          public isOperational = true,
+        ) {
+          super(message);
+          Error.captureStackTrace(this, this.constructor);
+        }
+      }
+
+      export class NotFoundError extends AppError {
+        constructor(resource: string, id: string | number) {
+          super(404, `${resource} bulunamadi: ${id}`);
+        }
+      }
+
+      export class ValidationError extends AppError {
+        constructor(message: string) {
+          super(422, message);
+        }
+      }
+
+      // middleware/error-handler.ts
+      import type { ErrorRequestHandler } from "express";
+
+      export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+        if (err instanceof AppError) {
+          return res.status(err.statusCode).json({
+            error: err.message,
+          });
+        }
+
+        logger.error("Beklenmeyen hata", { error: err });
+        return res.status(500).json({
+          error: "Sunucu hatasi olustu",
+        });
+      };
+      ```
+  test_command: "npx vitest run --coverage"
+  lint_command: "npx eslint --fix src/ && npx prettier --write src/"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.ts ]]; then
+        npx prettier --write "$FILE_PATH" 2>/dev/null
+        npx eslint --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: async-error-handling.md
+    content: |
+      ---
+      description: Async error handling kurallari
+      ---
+      ## Async Error Handling
+      - Express'te async handler'lar error'u otomatik YAKALAMAZ
+      - `express-async-errors` paketi kullan veya custom wrapper yaz
+      - Fastify async error'lari otomatik yakalar (wrapper gereksiz)
+      - Her async islemde hata durumunu handle et
+      - Unhandled promise rejection'lari process seviyesinde yakala
+
+      ### Ornek
+      ```typescript
+      // YANLIS - unhandled rejection riski
+      app.get("/users/:id", async (req, res) => {
+        const user = await userService.findById(req.params.id); // hata firlarsa?
+        res.json({ data: user });
+      });
+
+      // DOGRU - wrapper ile
+      const asyncHandler = (fn: RequestHandler): RequestHandler =>
+        (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+      app.get("/users/:id", asyncHandler(async (req, res) => {
+        const user = await userService.findById(req.params.id);
+        if (!user) throw new NotFoundError("User", req.params.id);
+        res.json({ data: user });
+      }));
+      ```
+
+  - name: validation.md
+    content: |
+      ---
+      description: Zod ile request validation kurallari
+      ---
+      ## Validation (Zod)
+      - Her endpoint icin Zod schema tanimla
+      - Schema'dan TypeScript tipini cikar: `z.infer<typeof schema>`
+      - Validation middleware ile handler'dan once validate et
+      - Custom error mesajlari Turkce olsun
+      - Reusable schema parcalari olustur (ortak alanlar icin)
+
+      ### Ornek
+      ```typescript
+      // schemas/user.schema.ts
+      import { z } from "zod";
+
+      export const createUserSchema = z.object({
+        body: z.object({
+          name: z.string().min(2, "Isim en az 2 karakter olmali"),
+          email: z.string().email("Gecerli bir email girin"),
+          password: z.string().min(8, "Sifre en az 8 karakter olmali"),
+        }),
+      });
+
+      export type CreateUserInput = z.infer<typeof createUserSchema>["body"];
+
+      // middleware/validate.ts
+      import type { RequestHandler } from "express";
+      import type { AnyZodObject } from "zod";
+
+      export const validate = (schema: AnyZodObject): RequestHandler =>
+        async (req, _res, next) => {
+          const result = await schema.safeParseAsync({
+            body: req.body,
+            query: req.query,
+            params: req.params,
+          });
+          if (!result.success) {
+            throw new ValidationError(
+              result.error.issues.map(i => i.message).join(", "),
+            );
+          }
+          next();
+        };
+      ```
+
+  - name: middleware-patterns.md
+    content: |
+      ---
+      description: Express/Fastify middleware kaliplari
+      ---
+      ## Middleware Patterns
+      - Middleware'leri tek sorumluluk ile yaz
+      - Sirasi onemli: logger -> auth -> rate-limit -> validation -> handler -> error
+      - Route-specific middleware: `router.use()` veya route taniminda
+      - Error handler middleware'i EN SON register et (4 parametre: err, req, res, next)
+      - Request'e veri eklerken typed middleware kullan
+
+      ### Ornek
+      ```typescript
+      // middleware/auth.ts
+      import type { RequestHandler } from "express";
+
+      declare global {
+        namespace Express {
+          interface Request {
+            userId?: string;
+          }
+        }
+      }
+
+      export const authenticate: RequestHandler = async (req, _res, next) => {
+        const token = req.headers.authorization?.replace("Bearer ", "");
+        if (!token) throw new AppError(401, "Token gerekli");
+
+        const payload = await verifyToken(token);
+        req.userId = payload.sub;
+        next();
+      };
+      ```
+
+skills_include:
+  - tdd-workflow
+  - security-review
+  - typescript-patterns
+  - backend-patterns
+  - docker-patterns
+  - database-patterns
+  - node-patterns
+
+skills_exclude:
+  - "python-*"
+  - "golang-*"
+  - "rust-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "flutter-*"
+  - "django-*"
+  - "springboot-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Katman Yapisi
+      Route -> Controller -> Service -> Repository -> Database
+
+      ## Middleware Sirasi
+      _(Middleware registration sirasi)_
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: api-contracts.md
+    content: |
+      # API Sozlesmeleri
+
+      ## Endpoint Listesi
+      _(Method, path, request/response, auth)_
+
+      ## Zod Schemalari
+      _(Validation schema tanimlari)_
+
+  - name: database-schema.md
+    content: |
+      # Veritabani Semasi
+
+      ## Tablolar
+      _(Prisma/Drizzle model tanimlari)_
+
+      ## Migration Gecmisi
+      _(Uygulanan migration'lar)_

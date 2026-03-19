@@ -1,0 +1,286 @@
+version: 1
+name: nextjs
+description: "Next.js 14+ App Router, TypeScript, Tailwind CSS projesi"
+extends: base
+languages: [typescript, javascript]
+frameworks: [nextjs, react, tailwind]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir fullstack Next.js gelistiricisisin.
+    Temiz, performansli, SEO-uyumlu ve erisilebilir Next.js 14+ App Router kodu yazarsin.
+    Her degisiklikte Core Web Vitals, guvenlik ve kullanici deneyimi onceligindir.
+  project_overview: |
+    Bu bir Next.js 14+ App Router tabanli fullstack web uygulamasidir.
+    Server Components varsayilan, Client Components sadece gerektiginde kullanilir.
+    Prisma ORM ile veritabani erisimi, Tailwind CSS ile stillendirme yapilir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Next.js 14+, React 18, TypeScript 5, Tailwind CSS, Prisma, NextAuth.js, Zod"
+  coding_standards: |
+    - TypeScript strict mode zorunlu, `any` tipi YASAK (unknown veya generic kullan)
+    - Server Components varsayilan, Client Components sadece interaktivite gerektiginde
+    - "use client" direktifini sadece gercekten gerekli dosyalara ekle
+    - Tailwind CSS class'larini kullan, inline style YAZMA, CSS module sadece karmasik animasyon icin
+    - Form validasyonu icin Zod schema kullan, client ve server'da ayni schema
+    - API route'larinda request body'yi Zod ile validate et
+    - next/image kullan, <img> tagi YASAK (performans ve optimizasyon)
+    - next/link kullan, <a> tagi YASAK (client-side navigation)
+    - next/font kullan, font dosyalarini public/'e koyma
+    - Dosya isimleri kebab-case: `user-profile.tsx`, `auth-provider.tsx`
+    - Component isimleri PascalCase: `UserProfile`, `AuthProvider`
+    - Server Actions async fonksiyon olarak tanimla, form submission icin kullan
+    - Environment variable'lari `NEXT_PUBLIC_` prefix'i ile client'a ac, hassas olanlari ACMA
+  architecture: |
+    ```
+    src/
+    ├── app/
+    │   ├── layout.tsx            # Root layout (providers, font, metadata)
+    │   ├── page.tsx              # Ana sayfa (Server Component)
+    │   ├── loading.tsx           # Suspense fallback
+    │   ├── error.tsx             # Error boundary
+    │   ├── not-found.tsx         # 404 sayfasi
+    │   ├── globals.css           # Tailwind directives
+    │   ├── api/
+    │   │   └── [resource]/
+    │   │       └── route.ts      # API Route Handler
+    │   ├── (auth)/
+    │   │   ├── login/page.tsx
+    │   │   └── register/page.tsx
+    │   └── dashboard/
+    │       ├── layout.tsx        # Dashboard layout
+    │       └── page.tsx
+    ├── components/
+    │   ├── ui/                   # Genel UI (Button, Input, Card)
+    │   ├── forms/                # Form bileşenleri
+    │   └── layout/               # Header, Footer, Sidebar
+    ├── lib/
+    │   ├── prisma.ts             # Prisma client singleton
+    │   ├── auth.ts               # NextAuth config
+    │   ├── utils.ts              # Yardimci fonksiyonlar
+    │   └── validations.ts        # Zod schemalari
+    ├── hooks/                    # Custom React hooks
+    ├── types/                    # TypeScript type tanimlari
+    └── services/                 # API/veritabani islemleri
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme
+    - `any` tipi ASLA kullanma (unknown, generic veya dogru tipi bul)
+    - Client Component'te veritabani erisimi YAPMA (Prisma sadece server'da)
+    - Secret'lari `NEXT_PUBLIC_` ile ACMA (client'a sizdirir)
+    - <img> tagi kullanma, next/image kullan
+    - `useEffect` icinde data fetch YAPMA, server component veya React Query kullan
+    - node_modules/ veya .next/ dizinlerini COMMIT etme
+  error_handling: |
+    - Her route segment'te `error.tsx` ile hata boundary tanimla
+    - Server Actions'da try-catch ile hatalari yakala, kullaniciya Turkce mesaj don
+    - API route'larinda NextResponse ile dogru status code don
+    - Form validation hatalarini alan bazinda goster
+    - Loading state'leri `loading.tsx` veya Suspense ile yonet
+    - Ornek:
+      ```typescript
+      // app/dashboard/error.tsx
+      "use client";
+      export default function Error({ error, reset }: {
+        error: Error & { digest?: string };
+        reset: () => void;
+      }) {
+        return (
+          <div className="flex flex-col items-center gap-4 p-8">
+            <h2 className="text-xl font-bold">Bir hata olustu</h2>
+            <p className="text-muted-foreground">{error.message}</p>
+            <button onClick={reset} className="btn btn-primary">
+              Tekrar Dene
+            </button>
+          </div>
+        );
+      }
+      ```
+  test_command: "npx jest --coverage --passWithNoTests"
+  lint_command: "npx next lint && npx prettier --write ."
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.ts ]] || [[ "$FILE_PATH" == *.tsx ]]; then
+        npx prettier --write "$FILE_PATH" 2>/dev/null
+        npx eslint --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: server-components.md
+    content: |
+      ---
+      description: Server ve Client Component ayrimi kurallari
+      ---
+      ## Server vs Client Components
+      - Next.js 14'te TUM componentler varsayilan olarak Server Component'tir
+      - "use client" direktifini SADECE su durumlarda ekle:
+        - useState, useEffect, useRef gibi React hook'lari kullaniyorsan
+        - onClick, onChange gibi event handler'lar varsa
+        - Browser API'leri (window, document) kullaniyorsan
+      - Server Component'lerde async/await ile direkt data fetch yap
+      - Client Component'leri mumkun oldugunca kucuk tut, leaf node'larda kullan
+      - Server Component icinde Client Component render edebilirsin (tersi DEGIL)
+
+      ### Ornek
+      ```tsx
+      // YANLIS - gereksiz client component
+      "use client";
+      export default function UserList({ users }: { users: User[] }) {
+        return <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>;
+      }
+
+      // DOGRU - server component olarak birak
+      export default function UserList({ users }: { users: User[] }) {
+        return <ul>{users.map(u => <li key={u.id}>{u.name}</li>)}</ul>;
+      }
+      ```
+
+  - name: data-fetching.md
+    content: |
+      ---
+      description: Veri cekme ve cache stratejileri
+      ---
+      ## Data Fetching Kurallari
+      - Server Component'lerde async/await ile direkt fetch yap
+      - `useEffect` icinde data fetch YAPMA, server component veya React Query kullan
+      - fetch() cache davranisini acikca belirt: `cache: 'force-cache'` veya `no-store`
+      - `revalidatePath()` ve `revalidateTag()` ile cache invalidation yap
+      - Server Actions ile form mutation yap, API route gereksiz
+      - Paralel data fetching icin Promise.all kullan
+
+      ### Ornek
+      ```tsx
+      // Server Component - direkt async fetch
+      export default async function DashboardPage() {
+        const [users, stats] = await Promise.all([
+          prisma.user.findMany({ take: 10 }),
+          getStats(),
+        ]);
+        return <Dashboard users={users} stats={stats} />;
+      }
+
+      // Server Action - form mutation
+      async function createUser(formData: FormData) {
+        "use server";
+        const data = userSchema.parse(Object.fromEntries(formData));
+        await prisma.user.create({ data });
+        revalidatePath("/users");
+      }
+      ```
+
+  - name: no-any.md
+    content: |
+      ---
+      description: TypeScript strict type kurallari
+      ---
+      ## Type Safety Kurallari
+      - `any` tipi ASLA kullanma, tsconfig'de `strict: true` olmali
+      - Bilinmeyen tipler icin `unknown` kullan, sonra type guard ile daralt
+      - API response'lari icin Zod schema tanimla, `z.infer<typeof schema>` ile tip cikar
+      - Generic kullan: `function fetch<T>(url: string): Promise<T>`
+      - Event handler'larda dogru event tipini belirt: `React.ChangeEvent<HTMLInputElement>`
+
+      ### Ornek
+      ```typescript
+      // YANLIS
+      function processData(data: any) { return data.name; }
+
+      // DOGRU
+      interface User { name: string; email: string; }
+      function processData(data: unknown): string {
+        const user = userSchema.parse(data);  // Zod validation
+        return user.name;
+      }
+      ```
+
+  - name: image-optimization.md
+    content: |
+      ---
+      description: Gorsel optimizasyon kurallari
+      ---
+      ## Image Optimization
+      - HER ZAMAN `next/image` kullan, `<img>` tagi YASAK
+      - width ve height prop'larini belirt (layout shift onleme)
+      - priority prop'unu above-the-fold gorsellere ekle (LCP iyilestirme)
+      - Remote image'ler icin `next.config.js`'de domains tanimla
+      - Buyuk gorsellerde `sizes` prop'u ile responsive boyut belirt
+      - placeholder="blur" ile loading deneyimini iyilestir
+
+      ### Ornek
+      ```tsx
+      import Image from "next/image";
+
+      // DOGRU
+      <Image
+        src="/hero.webp"
+        alt="Hero gorseli"
+        width={1200}
+        height={630}
+        priority
+        className="rounded-lg object-cover"
+      />
+      ```
+
+skills_include:
+  - frontend-patterns
+  - vercel-react-best-practices
+  - web-design-guidelines
+  - tdd-workflow
+  - security-review
+  - typescript-patterns
+  - tailwind-patterns
+  - prisma-patterns
+
+skills_exclude:
+  - "python-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "golang-*"
+  - "rust-*"
+  - "springboot-*"
+  - "flutter-*"
+  - "django-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Route Yapisi
+      App Router segment'leri ve layout hierarchy.
+
+      ## Component Katmanlari
+      Server Components -> Client Components (leaf node'lar)
+      Data fetching sadece server katmaninda.
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: page-routes.md
+    content: |
+      # Sayfa ve API Route Listesi
+
+      ## Sayfalar
+      _(Her yeni sayfa eklendikce buraya yazilir)_
+
+      ## API Routes
+      _(API route'lari ve metodlari)_
+
+      ## Server Actions
+      _(Form mutation'lari)_
+
+  - name: component-inventory.md
+    content: |
+      # Component Envanteri
+
+      ## UI Components
+      _(Yeniden kullanilabilir UI bilesenleri)_
+
+      ## Layout Components
+      _(Header, Footer, Sidebar vb.)_
+
+      ## Form Components
+      _(Form bilesenleri ve validation schemalari)_

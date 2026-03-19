@@ -1,0 +1,315 @@
+version: 1
+name: django
+description: "Django 5+, DRF, PostgreSQL ile backend API"
+extends: base
+languages: [python]
+frameworks: [django, drf]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir Django backend gelistiricisisin.
+    Temiz, guvenli, test edilebilir Python + Django kodu yazarsin.
+    Her degisiklikte guvenlik, QuerySet optimizasyonu ve Django best practice'leri onceligindir.
+  project_overview: |
+    Bu bir Django 5+ ve Django REST Framework tabanli API projesidir.
+    PostgreSQL veritabani, app-bazli modular yapi kullanilir.
+    Her app kendi models/views/serializers/urls yapisina sahiptir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Python 3.12+, Django 5, Django REST Framework, PostgreSQL, Celery, Redis, pytest-django"
+  coding_standards: |
+    - Type hints zorunlu (tum fonksiyon parametreleri ve donus tipleri)
+    - Django app'leri kucuk ve tek sorumluluk ile tasarla
+    - Model field'larinda `verbose_name` ve `help_text` belirt
+    - QuerySet method chain kullan, raw SQL YAZMA (zorunlu degilse)
+    - `select_related()` ve `prefetch_related()` ile N+1 query onle
+    - Serializer'larda field'lari explicit listele, `fields = "__all__"` KULLANMA
+    - ViewSet tercih et, function-based view sadece basit islemler icin
+    - Permission class'lari her view'da belirt, varsayilana guvenme
+    - Signal'lari dikkatli kullan, karmasik logic icin service layer olustur
+    - Settings'i split et: `base.py`, `development.py`, `production.py`
+    - Migration dosyalarini COMMIT et, elle duzenleme (zorunlu degilse)
+    - Custom User model kullan, `AbstractUser` veya `AbstractBaseUser` extend et
+  architecture: |
+    ```
+    project/
+    ├── manage.py
+    ├── config/                   # Proje config (settings, urls, wsgi)
+    │   ├── settings/
+    │   │   ├── base.py           # Ortak ayarlar
+    │   │   ├── development.py    # Dev ayarlar (DEBUG=True)
+    │   │   └── production.py     # Prod ayarlar
+    │   ├── urls.py               # Root URL config
+    │   └── celery.py             # Celery config
+    ├── apps/
+    │   ├── users/
+    │   │   ├── models.py         # Custom User model
+    │   │   ├── serializers.py    # DRF serializer'lar
+    │   │   ├── views.py          # ViewSet'ler
+    │   │   ├── urls.py           # App URL'leri
+    │   │   ├── permissions.py    # Custom permission'lar
+    │   │   ├── filters.py        # django-filter FilterSet
+    │   │   ├── signals.py        # Signal handler'lar
+    │   │   ├── services.py       # Business logic
+    │   │   ├── tasks.py          # Celery task'lari
+    │   │   ├── admin.py          # Admin panel config
+    │   │   └── tests/
+    │   │       ├── test_models.py
+    │   │       ├── test_views.py
+    │   │       └── test_services.py
+    │   └── orders/
+    │       └── (ayni yapi)
+    ├── core/
+    │   ├── models.py             # TimeStampedModel base class
+    │   ├── pagination.py         # Custom pagination
+    │   ├── permissions.py        # Ortak permission'lar
+    │   └── exceptions.py         # Custom exception handler
+    └── requirements/
+        ├── base.txt
+        ├── development.txt
+        └── production.txt
+    ```
+  hard_boundaries: |
+    - `.env` dosyalarini ASLA duzenleme, `SECRET_KEY`'i source code'a KOYMA
+    - `fields = "__all__"` serializer'da KULLANMA, explicit field listesi yaz
+    - View'da QuerySet `filter()` olmadan `.all()` buyuk tablolarda KULLANMA (pagination)
+    - `DEBUG = True` production'da BIRAKMA
+    - Migration dosyalarini SILME veya elle DUZENLEME (merge conflict haric)
+    - Raw SQL zorunlu olmadan KULLANMA, ORM kullan
+    - Signal icinde agir islem YAPMA, Celery task'a delege et
+  error_handling: |
+    - DRF custom exception handler tanimla (`EXCEPTION_HANDLER` setting)
+    - Spesifik exception yakala, bare `except:` KULLANMA
+    - Validation hatalari serializer'da handle et, Turkce mesaj don
+    - 404 icin `get_object_or_404()` kullan
+    - Celery task'larda retry mekanizmasi kur (`autoretry_for`, `max_retries`)
+    - Ornek:
+      ```python
+      # core/exceptions.py
+      from rest_framework.views import exception_handler
+      from rest_framework.response import Response
+      from rest_framework import status
+
+
+      def custom_exception_handler(exc, context):
+          response = exception_handler(exc, context)
+
+          if response is not None:
+              response.data = {
+                  "error": True,
+                  "message": _extract_message(response.data),
+                  "details": response.data,
+              }
+              return response
+
+          # Beklenmeyen hatalar
+          import logging
+          logger = logging.getLogger(__name__)
+          logger.exception("Beklenmeyen hata", exc_info=exc)
+
+          return Response(
+              {"error": True, "message": "Sunucu hatasi olustu"},
+              status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+          )
+
+
+      def _extract_message(data: dict) -> str:
+          if isinstance(data, dict):
+              if "detail" in data:
+                  return str(data["detail"])
+              first_key = next(iter(data), None)
+              if first_key:
+                  val = data[first_key]
+                  return str(val[0]) if isinstance(val, list) else str(val)
+          return "Istek isleniemedi"
+      ```
+  test_command: "pytest tests/ -v --tb=short --reuse-db"
+  lint_command: "ruff check --fix && ruff format"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.py ]]; then
+        ruff format "$FILE_PATH" 2>/dev/null
+        ruff check --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: model-patterns.md
+    content: |
+      ---
+      description: Django model tasarim kurallari
+      ---
+      ## Model Patterns
+      - TimeStampedModel base class kullan (created_at, updated_at otomatik)
+      - `verbose_name` ve `verbose_name_plural` Meta'da belirt
+      - `__str__` method'u her modelde tanimla
+      - `ordering` Meta'da belirt, view'da tekrar siralamaya gerek kalmasin
+      - Index'leri `Meta.indexes` ile tanimla, sik sorgulanan alanlar icin
+      - Soft delete: `is_active` flag veya custom manager ile
+
+      ### Ornek
+      ```python
+      # core/models.py
+      class TimeStampedModel(models.Model):
+          created_at = models.DateTimeField(auto_now_add=True)
+          updated_at = models.DateTimeField(auto_now=True)
+
+          class Meta:
+              abstract = True
+
+      # apps/users/models.py
+      class User(AbstractUser, TimeStampedModel):
+          email = models.EmailField(
+              unique=True,
+              verbose_name="E-posta",
+              help_text="Kullanicinin e-posta adresi",
+          )
+          phone = models.CharField(
+              max_length=15,
+              blank=True,
+              verbose_name="Telefon",
+          )
+
+          USERNAME_FIELD = "email"
+          REQUIRED_FIELDS = ["username"]
+
+          class Meta:
+              verbose_name = "Kullanici"
+              verbose_name_plural = "Kullanicilar"
+              ordering = ["-created_at"]
+              indexes = [
+                  models.Index(fields=["email"]),
+              ]
+
+          def __str__(self) -> str:
+              return self.email
+      ```
+
+  - name: queryset-optimization.md
+    content: |
+      ---
+      description: Django QuerySet optimizasyon kurallari
+      ---
+      ## QuerySet Optimization
+      - N+1 query OLUSTURMA: ForeignKey icin `select_related()`, M2M icin `prefetch_related()`
+      - `only()` ve `defer()` ile gereksiz field'lari yuklemekten kacin
+      - `values()` veya `values_list()` ile sadece gereken alanlari sec
+      - `count()` kullan, `len(queryset)` KULLANMA (tum kayitlari yuklememek icin)
+      - `exists()` kullan, `if queryset:` KULLANMA (ayni sebep)
+      - Bulk islemler: `bulk_create()`, `bulk_update()`, `in_bulk()`
+
+      ### Ornek
+      ```python
+      # YANLIS - N+1 query
+      orders = Order.objects.all()
+      for order in orders:
+          print(order.user.name)  # her order icin ayri query!
+
+      # DOGRU - tek query ile
+      orders = Order.objects.select_related("user").all()
+      for order in orders:
+          print(order.user.name)  # user onceden yuklu
+
+      # YANLIS - tum kayitlari yukler
+      if len(Order.objects.filter(status="pending")):
+          pass
+
+      # DOGRU - sadece COUNT query
+      if Order.objects.filter(status="pending").exists():
+          pass
+      ```
+
+  - name: migration-safety.md
+    content: |
+      ---
+      description: Django migration guvenlik kurallari
+      ---
+      ## Migration Safety
+      - Migration dosyalarini COMMIT et, .gitignore'a EKLEME
+      - Migration dosyalarini elle DUZENLEME (merge conflict haric)
+      - Buyuk tablolarda `AddField` + `RunSQL` ile zero-downtime migration yap
+      - `RemoveField` oncesi field'i nullable yap, deploy et, sonra sil
+      - Data migration icin `RunPython` kullan, schema migration ile KARISTIRMA
+      - `squashmigrations` ile eski migration'lari birlestir
+
+      ### Ornek
+      ```python
+      # Zero-downtime field ekleme
+      # Migration 1: nullable field ekle
+      class Migration(migrations.Migration):
+          operations = [
+              migrations.AddField(
+                  model_name="user",
+                  name="phone",
+                  field=models.CharField(max_length=15, null=True, blank=True),
+              ),
+          ]
+
+      # Migration 2: data migration (eski veriyi doldur)
+      def populate_phone(apps, schema_editor):
+          User = apps.get_model("users", "User")
+          User.objects.filter(phone__isnull=True).update(phone="")
+
+      class Migration(migrations.Migration):
+          operations = [
+              migrations.RunPython(populate_phone, migrations.RunPython.noop),
+          ]
+      ```
+
+skills_include:
+  - tdd-workflow
+  - security-review
+  - python-patterns
+  - python-testing
+  - django-patterns
+  - postgres-patterns
+  - docker-patterns
+  - backend-patterns
+  - database-migrations
+
+skills_exclude:
+  - "golang-*"
+  - "rust-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "flutter-*"
+  - "react-*"
+  - "vue-*"
+  - "springboot-*"
+  - "nextjs-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## App Yapisi
+      _(Django app listesi ve sorumluluklari)_
+
+      ## Katmanlar
+      URL -> View/ViewSet -> Serializer -> Service -> Model -> DB
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: api-contracts.md
+    content: |
+      # API Sozlesmeleri
+
+      ## Endpoint Listesi
+      _(DRF router ve URL tanimlari)_
+
+      ## Serializer'lar
+      _(Request/Response serializer'lar)_
+
+  - name: database-schema.md
+    content: |
+      # Veritabani Semasi
+
+      ## Modeller
+      _(Django model tanimlari ve iliskileri)_
+
+      ## Migration Gecmisi
+      _(Uygulanan migration'lar)_

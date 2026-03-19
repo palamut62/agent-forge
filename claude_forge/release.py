@@ -101,7 +101,7 @@ def smart_push(project_path: str) -> bool:
 
     # Block direct push to main/master
     if branch in ("main", "master"):
-        console.print("  [red][-] Cannot push directly to {branch}. Create a feature branch first.[/red]")
+        console.print(f"  [red][-] Cannot push directly to {branch}. Create a feature branch first.[/red]")
         return False
 
     # Check if remote exists

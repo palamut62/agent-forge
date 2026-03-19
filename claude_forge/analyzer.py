@@ -11,36 +11,68 @@ console = Console()
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 SYSTEM_PROMPT = """\
-You are a Claude Code project setup expert. You will receive a project's file structure,
-languages/frameworks used, and the user's existing Claude Code skill/plugin inventory.
+You are an expert at configuring AI coding assistant workspaces. You receive a project's structure,
+languages/frameworks, the target assistant platform, and available skills/plugins.
 
-Your tasks:
-1. Analyze the project type and needs
-2. Select relevant skills/plugins from the user's inventory
-3. Create a detailed, project-specific CLAUDE.md (AT LEAST 30 lines)
-4. Define necessary hooks, rules, and memory structure
-5. Create settings.json that wires up the hooks
+Your job: generate a complete, HIGH-QUALITY workspace configuration that will make an AI assistant
+highly effective at working on this specific project.
 
-CRITICAL RULES:
-- "claude_md" field is REQUIRED and must be detailed. Must include tech stack, coding standards, architecture, boundaries, and test commands.
-- "settings_json" field is REQUIRED. Must wire hooks into .claude/settings.json.
-- "memory_files" field is REQUIRED. Must include at least MEMORY.md, debugging.md, preferences.md.
-- "hooks" must have at least 2: format + protect-env
-- "rules" must have at least 2
-- ALL fields must be filled, NO EMPTY FIELDS.
-- ALL content must be in ENGLISH. Do NOT use any other language.
+## What makes a GREAT guide file (CLAUDE.md / AGENTS.md):
 
-Respond with ONLY valid JSON. No explanations, no comments, no markdown code blocks.
+The guide file is the AI assistant's primary reference. It must be ACTIONABLE and SPECIFIC to this project.
+A good guide file answers: "If I'm an AI working on this project, what do I need to know to write correct code?"
+
+### REQUIRED Sections (minimum 80 lines total):
+
+1. **Your Role** (2-3 lines): What the AI should act as for this project
+2. **Project Overview** (3-5 lines): What this app does, who uses it, core domain concepts
+3. **Tech Stack** (list): Every technology with version constraints
+4. **Architecture** (10+ lines): Directory structure with ASCII tree, layer responsibilities,
+   data flow (e.g., Route -> Service -> Repository -> DB), what goes where
+5. **Coding Standards** (10+ lines): Naming conventions, patterns to follow, anti-patterns to avoid.
+   Be SPECIFIC: not "write clean code" but "use repository pattern for DB access, never query DB in route handlers"
+6. **Hard Boundaries** (5+ lines): Things the AI must NEVER do. Be concrete:
+   not just "don't break things" but "never use raw SQL string concatenation", "never return passwords in API responses"
+7. **Error Handling Strategy** (5+ lines): How errors should be handled, custom exception patterns, user-facing messages
+8. **Test Strategy** (5+ lines): How to write tests, what to test, naming conventions, test commands
+9. **Lint/Format Commands**: Exact commands to run
+10. **Recommended Skills**: List of relevant skills from the inventory
+11. **Memory System**: Instructions to read memory/MEMORY.md at session start
+
+### Rules file quality:
+Each rule must be ACTIONABLE with examples. Not "use async" but:
+- WHEN to use it (I/O operations, DB queries)
+- HOW to use it (show code example)
+- What MISTAKES to avoid (blocking calls in async context)
+
+### Memory templates:
+Pre-populate with useful structure. Not just "_(empty)_" but section headers that guide future entries:
+- architecture.md: layer diagram, key decisions
+- debugging.md: format for logging bugs (date, symptom, root cause, fix)
+
+## Output Rules:
+- "guide_content": REQUIRED, minimum 80 lines, project-specific (not generic advice)
+- "settings_json": REQUIRED, must wire hooks
+- "memory_files": REQUIRED, at least MEMORY.md + debugging.md + preferences.md
+- "hooks": at least 2 (format + protect-env)
+- "rules": at least 3, each with description frontmatter and code examples
+- ALL content must be in ENGLISH
+- NO empty fields
+
+Respond with ONLY valid JSON. No markdown code blocks, no explanations.
 """
 
 USER_PROMPT_TEMPLATE = """\
 ## Project Info
 - Directory: {project_name}
+- Target platform: {target_label}
+- Guide file: {guide_file}
+- Config directory: {config_dir}
 - Languages: {languages}
 - Frameworks: {frameworks}
 - File count: {file_count}
 - Has Git: {has_git}
-- Existing Claude setup: {has_claude}
+- Existing target setup: {has_target_setup}
 
 ## File Tree (first 50)
 {file_tree}
@@ -65,7 +97,7 @@ Respond in this JSON format (ALL FIELDS REQUIRED, DO NOT LEAVE EMPTY):
   "recommended_skills": [
     {{"name": "skill-name", "source": "superpowers|everything-claude-code|global|plugin", "reason": "why needed"}}
   ],
-  "claude_md": "# Project Name -- Claude Guide\\n\\n## Your Role\\nYou are a senior developer on this project.\\n\\n## Tech Stack\\n- ...\\n\\n## Coding Standards\\n- ...\\n\\n## Hard Boundaries (Never Do)\\n- Never edit .env files\\n- Never commit directly to main branch\\n\\n## Test Commands\\n- ...",
+  "guide_content": "# Project Name -- Workspace Guide\\n\\n## Your Role\\nYou are a senior developer on this project.\\n\\n## Tech Stack\\n- ...\\n\\n## Coding Standards\\n- ...\\n\\n## Hard Boundaries (Never Do)\\n- Never edit .env files\\n- Never commit directly to main branch\\n\\n## Test Commands\\n- ...",
   "hooks": [
     {{"name": "format.sh", "description": "Auto-format code on save", "content": "#!/bin/bash\\nFILE_PATH=$(echo \\"$CLAUDE_TOOL_INPUT\\" | python3 -c \\"import json,sys; d=json.load(sys.stdin); print(d.get('path',''))\\" 2>/dev/null)\\n# format commands based on project type\\nexit 0"}},
     {{"name": "protect-env.sh", "description": "Prevent writing to .env files", "content": "#!/bin/bash\\nFILE_PATH=$(echo \\"$CLAUDE_TOOL_INPUT\\" | python3 -c \\"import json,sys; d=json.load(sys.stdin); print(d.get('path',''))\\" 2>/dev/null)\\nif [[ \\"$FILE_PATH\\" == *\\".env\\" ]] && [[ \\"$FILE_PATH\\" != *\\".env.example\\" ]]; then\\n  echo '{{\\\"block\\\": true, \\\"message\\\": \\\"BLOCKED: Writing to .env files is not allowed.\\\"}}' >&2\\n  exit 2\\nfi\\nexit 0"}}
@@ -80,16 +112,17 @@ Respond in this JSON format (ALL FIELDS REQUIRED, DO NOT LEAVE EMPTY):
     {{"name": "preferences.md", "content": "# Working Preferences\\n\\n_(No entries yet)_"}}
   ],
   "settings_json": {{
-    "hooks": {{
+                    "hooks": {{
       "PreToolUse": [
-        {{"matcher": "Edit|Write", "hooks": [{{"type": "command", "command": "bash .claude/hooks/protect-env.sh", "timeout": 5}}]}}
+        {{"matcher": "Edit|Write", "hooks": [{{"type": "command", "command": "bash {config_dir}/hooks/protect-env.sh", "timeout": 5}}]}}
       ],
       "PostToolUse": [
-        {{"matcher": "Edit|Write", "hooks": [{{"type": "command", "command": "bash .claude/hooks/format.sh", "timeout": 10}}]}}
+        {{"matcher": "Edit|Write", "hooks": [{{"type": "command", "command": "bash {config_dir}/hooks/format.sh", "timeout": 10}}]}}
       ]
     }}
   }},
-  "warnings": ["any warnings"]
+  "warnings": ["any warnings"],
+  "target": "{target_key}"
 }}
 """
 
@@ -120,11 +153,15 @@ def analyze_project(
 
     user_prompt = USER_PROMPT_TEMPLATE.format(
         project_name=project_info["name"],
+        target_key=project_info.get("target", "claude"),
+        target_label=project_info.get("target_label", "Claude Code"),
+        guide_file=project_info.get("guide_file", "CLAUDE.md"),
+        config_dir=project_info.get("config_dir", ".claude"),
         languages=", ".join(project_info["languages"]) or "unknown",
         frameworks=", ".join(project_info["frameworks"]) or "unknown",
         file_count=project_info["file_count"],
         has_git=project_info["has_git"],
-        has_claude=project_info["has_claude"],
+        has_target_setup=project_info.get("has_agent_dir", False),
         file_tree=file_tree_text or "(empty directory)",
         global_skills=global_skills_text,
         plugin_commands=plugin_commands_text,

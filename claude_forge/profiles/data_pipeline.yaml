@@ -6,23 +6,289 @@ languages: [python]
 frameworks: []
 
 claude_md:
-  tech_stack: "Python 3.12, pandas/polars, httpx, SQLAlchemy"
+  role: |
+    Sen bu projede calisan kidemli bir veri muhendisisin.
+    Guvenilir, idempotent, iyi izlenen ETL pipeline'lari yazarsin.
+    Her degisiklikte veri butunlugu, performans ve tekrarlanabilirlik onceligindir.
+  project_overview: |
+    Bu bir Python ETL/veri pipeline projesidir.
+    Extract-Transform-Load adimlari ile veri isleme, validasyon ve yukleme yapar.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Python 3.12, pandas/polars, SQLAlchemy, httpx, pydantic, loguru, APScheduler/prefect, great_expectations"
   coding_standards: |
-    - Idempotent islemler
-    - Her adim loglama
-    - Retry mekanizmasi
-  test_command: "pytest tests/ -v"
+    - Type hints zorunlu (tum fonksiyon parametreleri ve donus tipleri)
+    - Her pipeline adimi idempotent olmali (tekrar calistirmak ayni sonucu vermeli)
+    - Veri validasyonu her adimda: input'ta schema kontrol, output'ta row count/checksum
+    - Loglama zorunlu: her adimin baslangici, bitisi, islenen kayit sayisi, sure
+    - DataFrame islemlerinde polars tercih et (buyuk veri), pandas sadece uyumluluk icin
+    - SQL query'leri parameterized olmali (SQL injection'a karsi)
+    - Buyuk dosyalar chunk'lar halinde islensin (bellek tasirma riski)
+    - Config'de hardcode path/url YASAK, environment variable veya config dosyasi kullan
+    - Her pipeline'in dry-run modu olsun (gercek yazma yapmadan test)
+    - Tarih/saat islemlerinde timezone-aware datetime kullan (UTC)
+  architecture: |
+    ```
+    src/
+    ├── main.py                  # Pipeline orchestrator, scheduler
+    ├── config.py                 # pydantic Settings, pipeline config
+    ├── extractors/
+    │   ├── __init__.py
+    │   ├── base.py              # BaseExtractor abstract class
+    │   ├── api.py               # REST API'den veri cekme
+    │   ├── database.py          # Veritabanindan veri cekme
+    │   └── file.py              # CSV/JSON/Parquet dosya okuma
+    ├── transformers/
+    │   ├── __init__.py
+    │   ├── base.py              # BaseTransformer abstract class
+    │   ├── cleaner.py           # Veri temizleme (null, duplicate, format)
+    │   ├── enricher.py          # Veri zenginlestirme (join, lookup)
+    │   └── aggregator.py        # Gruplama ve toplama islemleri
+    ├── loaders/
+    │   ├── __init__.py
+    │   ├── base.py              # BaseLoader abstract class
+    │   ├── database.py          # Veritabanina yazma
+    │   └── file.py              # Dosyaya yazma (CSV/Parquet)
+    ├── validators/
+    │   ├── schemas.py           # Pydantic/pandera veri semalari
+    │   └── checks.py            # Data quality kontrolleri
+    ├── models/
+    │   └── schemas.py           # Pydantic modelleri
+    ├── utils/
+    │   ├── logging.py           # Loguru config, structured logging
+    │   └── retry.py             # Retry decorator (tenacity wrapper)
+    └── exceptions.py            # Custom exception'lar
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme
+    - Uretim veritabaninda DELETE/TRUNCATE kullanma (soft delete veya archive)
+    - Validasyon olmadan veri yukleme (her load'dan once validate et)
+    - Buyuk veri setlerini tek seferde bellige yuklemek (chunk kullan)
+    - Hardcode dosya yolu veya connection string kullanma
+    - Pipeline'i rollback mekanizmasi olmadan calistirma
+    - Log olmadan veri silme veya degistirme
+    - Timezone-naive datetime kullanma
+  error_handling: |
+    - Her pipeline adimi icin try/except, hata durumunda pipeline durur veya skip eder (config'e gore)
+    - Hata loglarinda: hangi adim, hangi kayit, ne hatasi oldugu acik olmali
+    - Partial failure destegi: basarili kayitlari kaydet, hatalilari ayri logla
+    - Retry mekanizmasi: network ve veritabani hatalari icin (tenacity, exponential backoff)
+    - Dead letter queue: islenemeyen kayitlar ayri tabloya/dosyaya yazilsin
+    - Pipeline sonunda ozet rapor: toplam/basarili/hatali kayit sayisi
+    - Ornek:
+      ```python
+      from tenacity import retry, stop_after_attempt, wait_exponential
+      from loguru import logger
+
+      @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=30))
+      async def extract_from_api(url: str) -> pl.DataFrame:
+          """API'den veri ceker, 3 deneme yapar."""
+          async with httpx.AsyncClient(timeout=30) as client:
+              response = await client.get(url)
+              response.raise_for_status()
+              return pl.DataFrame(response.json()["data"])
+
+      def run_pipeline(config: PipelineConfig) -> PipelineResult:
+          logger.info(f"Pipeline basliyor: {config.name}")
+          result = PipelineResult(name=config.name)
+
+          try:
+              raw = extractor.extract()
+              logger.info(f"Extract tamamlandi: {len(raw)} kayit")
+
+              validated = validator.validate(raw)
+              result.failed_count = len(raw) - len(validated)
+
+              transformed = transformer.transform(validated)
+              logger.info(f"Transform tamamlandi: {len(transformed)} kayit")
+
+              loader.load(transformed)
+              result.success_count = len(transformed)
+              logger.info(f"Load tamamlandi: {result.success_count} kayit yuklendi")
+          except Exception as e:
+              result.error = str(e)
+              logger.error(f"Pipeline hatasi: {e}")
+              raise
+
+          return result
+      ```
+  test_command: "pytest tests/ -v --tb=short"
   lint_command: "ruff check --fix && ruff format"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.py ]]; then
+        ruff format "$FILE_PATH" 2>/dev/null
+        ruff check --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: idempotency.md
+    content: |
+      ---
+      description: Pipeline idempotency kurallari
+      ---
+      ## Idempotency Kurallari
+      - Her pipeline adimi tekrar calistirildiginda ayni sonucu vermeli
+      - Load adiminda UPSERT kullan (INSERT ... ON CONFLICT UPDATE)
+      - Dosya yazarken uzerine yaz veya tarih bazli partitioning kullan
+      - Pipeline run'lari benzersiz ID ile takip et (run_id)
+      - Checkpoint mekanizmasi: hangi adim tamamlandi kaydet, hata sonrasi kaldigi yerden devam
+
+      ### Ornek
+      ```python
+      # YANLIS: Tekrar calistirmada duplicate olusur
+      def load(df: pl.DataFrame, engine: Engine) -> None:
+          df.write_database("target_table", engine, if_table_exists="append")
+
+      # DOGRU: Idempotent upsert
+      def load(df: pl.DataFrame, engine: Engine) -> None:
+          with engine.begin() as conn:
+              for row in df.iter_rows(named=True):
+                  conn.execute(text("""
+                      INSERT INTO target_table (id, name, value, updated_at)
+                      VALUES (:id, :name, :value, :updated_at)
+                      ON CONFLICT (id) DO UPDATE SET
+                          name = EXCLUDED.name,
+                          value = EXCLUDED.value,
+                          updated_at = EXCLUDED.updated_at
+                  """), row)
+      ```
+
+  - name: data-validation.md
+    content: |
+      ---
+      description: Veri dogrulama kurallari
+      ---
+      ## Data Validation Kurallari
+      - Extract sonrasi: schema kontrolu (beklenen kolonlar, tipler)
+      - Transform sonrasi: is kurallari kontrolu (null, range, unique)
+      - Load oncesi: son kontrol (row count, checksum)
+      - Gecersiz kayitlari ayir, pipeline'i durdurmadan devam et (configurable)
+      - Validation sonuclarini logla ve raporla
+
+      ### Ornek
+      ```python
+      import pandera as pa
+      import polars as pl
+
+      # Schema tanimi
+      schema = pa.DataFrameSchema({
+          "id": pa.Column(int, nullable=False, unique=True),
+          "email": pa.Column(str, pa.Check.str_matches(r".+@.+\..+")),
+          "amount": pa.Column(float, pa.Check.ge(0)),
+          "created_at": pa.Column("datetime64[ns]", nullable=False),
+      })
+
+      def validate_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+          """Veriyi dogrula, gecerli ve gecersiz kayitlari ayir."""
+          try:
+              validated = schema.validate(df, lazy=True)
+              return validated, pd.DataFrame()
+          except pa.errors.SchemaErrors as e:
+              invalid_indices = e.failure_cases["index"].unique()
+              valid = df.drop(index=invalid_indices)
+              invalid = df.loc[invalid_indices]
+              logger.warning(f"{len(invalid)} gecersiz kayit ayrildi")
+              return valid, invalid
+      ```
+
+  - name: logging-rules.md
+    content: |
+      ---
+      description: Pipeline loglama kurallari
+      ---
+      ## Loglama Kurallari
+      - Her pipeline adiminin baslangic ve bitisini logla
+      - Islenen kayit sayisi, sure, basari/hata orani logla
+      - Structured logging kullan (JSON format, uretimde parse edilebilir)
+      - Log seviyeleri: DEBUG (detay), INFO (adim bilgisi), WARNING (skip edilen), ERROR (hata)
+      - Hassas veriyi ASLA loglama (kisisel bilgi, sifre, token)
+      - Pipeline run_id'yi her log satirina ekle (correlation)
+
+      ### Ornek
+      ```python
+      from loguru import logger
+      import time
+
+      def log_step(step_name: str):
+          """Pipeline adim decorator'u."""
+          def decorator(func):
+              def wrapper(*args, **kwargs):
+                  logger.info(f"[{step_name}] Basladi")
+                  start = time.perf_counter()
+                  try:
+                      result = func(*args, **kwargs)
+                      elapsed = time.perf_counter() - start
+                      logger.info(f"[{step_name}] Tamamlandi ({elapsed:.2f}s)")
+                      return result
+                  except Exception as e:
+                      elapsed = time.perf_counter() - start
+                      logger.error(f"[{step_name}] Hata ({elapsed:.2f}s): {e}")
+                      raise
+              return wrapper
+          return decorator
+
+      @log_step("extract_users")
+      def extract_users(api_url: str) -> pl.DataFrame:
+          ...
+      ```
 
 skills_include:
   - python-review
   - python-patterns
+  - python-testing
   - postgres-patterns
   - tdd-workflow
+  - security-review
+  - database-migrations
 
 skills_exclude:
   - "threejs-*"
   - "kotlin-*"
   - "swift-*"
   - "frontend-*"
+  - "react-*"
   - "springboot-*"
+  - "jpa-*"
+  - "compose-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Pipeline Mimari Kararlar
+
+      ## Pipeline Akisi
+      Extract -> Validate -> Transform -> Validate -> Load -> Report
+
+      ## Pipeline Listesi
+      | Pipeline | Kaynak | Hedef | Schedule |
+      |----------|--------|-------|----------|
+      _(Her yeni pipeline eklendikce buraya yazilir)_
+
+      ## Veri Kaynaklari
+      _(API, veritabani, dosya kaynaklari)_
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: data-catalog.md
+    content: |
+      # Veri Katalogu
+
+      ## Tablolar / Veri Setleri
+      | Tablo | Aciklama | Kolon Sayisi | Tahmini Boyut |
+      |-------|----------|--------------|---------------|
+      _(Her yeni veri seti eklendikce buraya yazilir)_
+
+      ## Veri Kalite Kurallari
+      | Kural | Tablo | Kolon | Kontrol |
+      |-------|-------|-------|---------|
+      _(Validation kurallari buraya eklenir)_
+
+      ## Schema Degisiklikleri
+      | Tarih | Degisiklik | Migration |
+      |-------|------------|-----------|
+      _(Schema degisiklikleri buraya eklenir)_

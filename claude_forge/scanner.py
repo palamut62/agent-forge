@@ -1,7 +1,7 @@
 """Project and skills scanner."""
 
-import os
 from pathlib import Path
+from .targets import get_target_platform
 
 # Proje tipi algilama kurallari
 DETECTORS = {
@@ -28,17 +28,23 @@ FRAMEWORK_PATTERNS = {
 }
 
 
-def scan_project(project_path: str) -> dict:
+def scan_project(project_path: str, target: str = "claude") -> dict:
     """Proje klasorunu tara ve bilgi topla."""
     path = Path(project_path)
+    target_platform = get_target_platform(target)
+    config_dir = path / target_platform.config_dir
     result = {
         "path": str(path.absolute()),
         "name": path.name,
+        "target": target_platform.key,
+        "target_label": target_platform.label,
+        "guide_file": target_platform.guide_file,
+        "config_dir": target_platform.config_dir,
         "languages": [],
         "frameworks": [],
         "has_git": (path / ".git").exists(),
-        "has_claude": (path / ".claude").exists(),
-        "has_claude_md": (path / "CLAUDE.md").exists(),
+        "has_agent_dir": config_dir.exists(),
+        "has_guide": (path / target_platform.guide_file).exists(),
         "has_memory": (path / "memory").exists(),
         "file_count": 0,
         "file_tree": [],
@@ -46,6 +52,8 @@ def scan_project(project_path: str) -> dict:
         "existing_hooks": [],
         "existing_rules": [],
     }
+    result["has_claude"] = result["has_agent_dir"]
+    result["has_claude_md"] = result["has_guide"]
 
     # Dil algilama
     for lang, markers in DETECTORS.items():
@@ -85,27 +93,27 @@ def scan_project(project_path: str) -> dict:
                 result["file_tree"].append(str(item.relative_to(path)))
     result["file_count"] = count
 
-    # Mevcut Claude yapisini tara
-    claude_dir = path / ".claude"
-    if claude_dir.exists():
-        skills_dir = claude_dir / "skills"
+    # Mevcut hedef sistem yapisini tara
+    if config_dir.exists():
+        skills_dir = config_dir / "skills"
         if skills_dir.exists():
             result["existing_skills"] = [
                 d.name for d in skills_dir.iterdir() if d.is_dir()
             ]
-        hooks_dir = claude_dir / "hooks"
+        hooks_dir = config_dir / "hooks"
         if hooks_dir.exists():
             result["existing_hooks"] = [f.name for f in hooks_dir.iterdir() if f.is_file()]
-        rules_dir = claude_dir / "rules"
+        rules_dir = config_dir / "rules"
         if rules_dir.exists():
             result["existing_rules"] = [f.name for f in rules_dir.iterdir() if f.is_file()]
 
     return result
 
 
-def scan_available_skills(claude_home: str | None = None) -> dict:
+def scan_available_skills(home_dir: str | None = None, target: str = "claude") -> dict:
     """Kullanicinin mevcut tum skill ve pluginlerini tara."""
-    home = Path(claude_home or Path.home() / ".claude")
+    target_platform = get_target_platform(target)
+    home = Path(home_dir or Path.home() / target_platform.default_home_dir)
     result = {
         "global_skills": [],
         "plugin_skills": [],
@@ -163,8 +171,8 @@ def scan_available_skills(claude_home: str | None = None) -> dict:
                                     "org": org_dir.name,
                                     "description": desc,
                                 })
-                        # .claude/ altinda
-                        subdir2 = ver_dir / ".claude" / subdir_name
+                        # Target config dir altinda
+                        subdir2 = ver_dir / target_platform.config_dir / subdir_name
                         if subdir2.exists():
                             for md in subdir2.glob("*.md"):
                                 desc = _extract_description(md)

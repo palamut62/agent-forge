@@ -6,17 +6,212 @@ languages: [python]
 frameworks: [telegram-bot]
 
 claude_md:
-  tech_stack: "Python 3.12, python-telegram-bot/aiogram, httpx, loguru"
+  role: |
+    Sen bu projede calisan kidemli bir Python gelistiricisisin, Telegram bot gelistirme uzmanisin.
+    Temiz, async, kullanici dostu Telegram bot'lari yazarsin.
+    Her degisiklikte kullanici deneyimi, hata yonetimi ve guvenlik onceligindir.
+  project_overview: |
+    Bu bir Python Telegram bot projesidir.
+    Asenkron handler yapisi, conversation flow ve modular komut mimarisi kullanir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Python 3.12, python-telegram-bot 21+ / aiogram 3+, httpx, pydantic, loguru, APScheduler"
   coding_standards: |
-    - async handler'lar kullan
-    - Komut handler'larini ayri dosyalarda tut
-    - Hata mesajlarini kullaniciya Turkce goster
-  test_command: "pytest tests/ -v"
+    - Type hints zorunlu (tum fonksiyon parametreleri ve donus tipleri)
+    - async/await zorunlu (tum handler'lar ve I/O islemleri)
+    - Her komut handler'i ayri dosyada: handlers/<komut>.py
+    - Business logic services/ altinda, handler'da is mantigi YAZMA
+    - Keyboard/markup olusturma keyboards/ altinda
+    - Bot mesajlari ve cevaplari Turkce, samimi ve kisa olsun
+    - Uzun islemlerde "yazıyor..." (ChatAction.TYPING) goster
+    - Her handler'da hata yakalama olsun, kullaniciya anlasilir hata mesaji donsun
+    - Komut listesini BotFather'da ve kodda senkron tut
+  architecture: |
+    ```
+    src/
+    ├── main.py                  # Bot baslangic, Application builder
+    ├── config.py                 # pydantic Settings (BOT_TOKEN, vs.)
+    ├── handlers/
+    │   ├── __init__.py          # Tum handler'lari register et
+    │   ├── start.py             # /start, /help komutlari
+    │   ├── <feature>.py         # Ozellige ozel handler'lar
+    │   └── error.py             # Global error handler
+    ├── services/
+    │   └── <feature>.py         # Is mantigi (API cagrilari, hesaplamalar)
+    ├── keyboards/
+    │   ├── inline.py            # InlineKeyboardMarkup'lar
+    │   └── reply.py             # ReplyKeyboardMarkup'lar
+    ├── models/
+    │   └── schemas.py           # Pydantic data modelleri
+    ├── middlewares/              # Rate limiting, auth kontrolu
+    │   └── auth.py
+    ├── utils/
+    │   └── helpers.py           # Yardimci fonksiyonlar
+    └── exceptions.py            # Custom exception'lar
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme
+    - BOT_TOKEN'i koda hardcode etme, .env'den oku
+    - Handler icinde blocking (senkron) I/O kullanma
+    - Kullanici verisini loglama (KVKK/GDPR)
+    - Global degisken ile state tutma (context.user_data veya veritabani kullan)
+    - Sinirsiz dosya/medya kabul etme (boyut kontrolu yap)
+    - Hata durumunda kullaniciya stack trace gosterme
+    - Rate limiting olmadan API endpoint'lerine istek atma
+  error_handling: |
+    - Global error handler tanimla (application.add_error_handler)
+    - Her handler'da try/except ile spesifik hatalari yakala
+    - Kullaniciya donen hata mesajlari Turkce, samimi ve anlasilir olsun
+    - Internal hatalari loguru ile logla, kullaniciya detay gosterme
+    - Network hatalarinda retry mekanizmasi kullan (tenacity)
+    - Telegram API hatalarini ayri handle et (flood control, blocked by user)
+    - Ornek:
+      ```python
+      async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+          logger.error(f"Hata: {context.error}", exc_info=context.error)
+
+          if isinstance(context.error, TelegramError):
+              if "blocked" in str(context.error).lower():
+                  logger.warning(f"Kullanici botu engelledi: {update.effective_user.id}")
+                  return
+
+          if update and update.effective_message:
+              await update.effective_message.reply_text(
+                  "Bir hata olustu, lutfen daha sonra tekrar deneyin."
+              )
+      ```
+  test_command: "pytest tests/ -v --tb=short"
   lint_command: "ruff check --fix && ruff format"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.py ]]; then
+        ruff format "$FILE_PATH" 2>/dev/null
+        ruff check --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: handler-patterns.md
+    content: |
+      ---
+      description: Telegram handler yazim kurallari
+      ---
+      ## Handler Kurallari
+      - Her handler async olmali
+      - Handler'da is mantigi YAZMA, service katmanina delege et
+      - Handler sadece: input al -> service cagir -> response gonder
+      - ConversationHandler kullanirken state'leri enum ile tanimla
+      - Callback query'lerde `answer_callback_query()` cagrisi ZORUNLU
+      - Uzun islemlerde `ChatAction.TYPING` gonder
+      - Grup ve ozel mesaj davranisini ayir (update.effective_chat.type kontrolu)
+
+      ### Ornek: Basit Handler
+      ```python
+      async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+          """Hava durumu sorgula."""
+          await update.effective_chat.send_action(ChatAction.TYPING)
+
+          city = " ".join(context.args) if context.args else None
+          if not city:
+              await update.message.reply_text("Kullanim: /hava <sehir>")
+              return
+
+          try:
+              result = await weather_service.get_weather(city)
+              await update.message.reply_text(result.format_message())
+          except CityNotFoundError:
+              await update.message.reply_text(f"'{city}' sehri bulunamadi.")
+      ```
+
+      ### Ornek: Callback Query
+      ```python
+      async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+          query = update.callback_query
+          await query.answer()  # ZORUNLU: callback'i onayla
+
+          action = query.data
+          if action == "confirm":
+              await query.edit_message_text("Islem onaylandi!")
+          elif action == "cancel":
+              await query.edit_message_text("Islem iptal edildi.")
+      ```
+
+  - name: conversation-flow.md
+    content: |
+      ---
+      description: Conversation handler ve akis kurallari
+      ---
+      ## Conversation Flow Kurallari
+      - State'leri enum veya IntEnum ile tanimla (magic number YASAK)
+      - Her state icin ayri handler fonksiyonu yaz
+      - Timeout tanimla (ConversationHandler.conversation_timeout)
+      - Fallback handler ekle (/cancel komutu ZORUNLU)
+      - per_user=True, per_chat=True ayarlarini ihtiyaca gore belirle
+      - Conversation state'ini logla (debug icin)
+
+      ### Ornek
+      ```python
+      class FormState(IntEnum):
+          NAME = 0
+          EMAIL = 1
+          CONFIRM = 2
+
+      async def start_form(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+          await update.message.reply_text("Adinizi girin:")
+          return FormState.NAME
+
+      async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+          context.user_data["name"] = update.message.text
+          await update.message.reply_text("Email adresinizi girin:")
+          return FormState.EMAIL
+
+      async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+          await update.message.reply_text("Islem iptal edildi.")
+          context.user_data.clear()
+          return ConversationHandler.END
+
+      conv_handler = ConversationHandler(
+          entry_points=[CommandHandler("form", start_form)],
+          states={
+              FormState.NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+              FormState.EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_email)],
+              FormState.CONFIRM: [CallbackQueryHandler(confirm_handler)],
+          },
+          fallbacks=[CommandHandler("cancel", cancel)],
+          conversation_timeout=300,
+      )
+      ```
+
+  - name: keyboard-patterns.md
+    content: |
+      ---
+      description: Keyboard ve markup kullanim kurallari
+      ---
+      ## Keyboard Kurallari
+      - Inline keyboard'lari keyboards/inline.py'de tanimla
+      - Reply keyboard'lari keyboards/reply.py'de tanimla
+      - Callback data kisa ve anlamli olsun (max 64 byte)
+      - Callback data formati: `action:resource:id` (orn: `confirm:order:123`)
+      - Keyboard builder fonksiyonlari kullan, tekrar eden kodu onle
+
+      ### Ornek
+      ```python
+      # keyboards/inline.py
+      def confirm_keyboard(resource: str, resource_id: int) -> InlineKeyboardMarkup:
+          return InlineKeyboardMarkup([
+              [
+                  InlineKeyboardButton("Onayla", callback_data=f"confirm:{resource}:{resource_id}"),
+                  InlineKeyboardButton("Iptal", callback_data=f"cancel:{resource}:{resource_id}"),
+              ]
+          ])
+      ```
 
 skills_include:
   - python-review
   - python-patterns
+  - python-testing
   - tdd-workflow
   - security-review
 
@@ -28,3 +223,42 @@ skills_exclude:
   - "frontend-*"
   - "react-*"
   - "springboot-*"
+  - "jpa-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Bot Mimari Kararlar
+
+      ## Katman Yapisi
+      Handler -> Service -> External API / Database
+      Her katman sadece alt katmani cagirir.
+
+      ## Komut Listesi
+      | Komut | Aciklama | Handler Dosyasi |
+      |-------|----------|-----------------|
+      | /start | Baslangic mesaji | handlers/start.py |
+      | /help | Yardim mesaji | handlers/start.py |
+      _(Yeni komutlar eklendikce guncelle)_
+
+      ## Conversation Flow'lar
+      _(Cok adimli islemler buraya eklenir)_
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: bot-config.md
+    content: |
+      # Bot Konfigurasyonu
+
+      ## Environment Variables
+      | Degisken | Aciklama | Zorunlu |
+      |----------|----------|---------|
+      | BOT_TOKEN | Telegram bot token | Evet |
+      _(Yeni env degiskenleri eklendikce guncelle)_
+
+      ## Dis Servisler
+      _(Kullanilan API'ler ve entegrasyonlar)_
+
+      ## Rate Limits
+      _(Telegram API limitleri ve uygulanan throttle kurallari)_

@@ -4,21 +4,25 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from rich.console import Console
 from rich.table import Table
+from .targets import get_target_platform
 
 console = Console()
 
 
-def context_status(project_path: Path) -> dict:
+def context_status(project_path: Path, target: str = "claude") -> dict:
     """Memory ve context durumunu raporla."""
     project_path = Path(project_path)
     memory_dir = project_path / "memory"
     codemap_path = project_path / "docs" / "CODEMAP.md"
+    target_platform = get_target_platform(target)
 
     result = {
         "memory_files": 0,
         "total_lines": 0,
         "has_codemap": codemap_path.exists(),
-        "has_claude_md": (project_path / "CLAUDE.md").exists(),
+        "target_label": target_platform.label,
+        "guide_file": target_platform.guide_file,
+        "has_claude_md": (project_path / target_platform.guide_file).exists(),
         "files": [],
     }
 
@@ -37,9 +41,9 @@ def context_status(project_path: Path) -> dict:
     return result
 
 
-def display_context_status(project_path: Path) -> None:
+def display_context_status(project_path: Path, target: str = "claude") -> None:
     """Context durumunu goster."""
-    status = context_status(project_path)
+    status = context_status(project_path, target=target)
 
     table = Table(title="Context Status")
     table.add_column("Item", style="cyan")
@@ -47,14 +51,14 @@ def display_context_status(project_path: Path) -> None:
     table.add_column("Detail", style="dim")
 
     table.add_row(
-        "CLAUDE.md",
+        status["guide_file"],
         "[green]OK[/green]" if status["has_claude_md"] else "[red]YOK[/red]",
         "",
     )
     table.add_row(
         "Codemap",
         "[green]OK[/green]" if status["has_codemap"] else "[yellow]YOK[/yellow]",
-        "claude-forge map ile olustur" if not status["has_codemap"] else "",
+        "agent-forge map ile olustur" if not status["has_codemap"] else "",
     )
     table.add_row(
         "Memory dosyalari",

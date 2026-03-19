@@ -4,15 +4,17 @@ import json
 import yaml
 from pathlib import Path
 from .schema import ProfileSchema, HookEntry, RuleEntry, MemoryTemplate
+from ..targets import get_target_platform
 
 
-def extract_profile(project_path: Path, name: str) -> ProfileSchema:
+def extract_profile(project_path: Path, name: str, target: str = "claude") -> ProfileSchema:
     """Mevcut projedeki .claude/ yapisindan profil cikar."""
     project_path = Path(project_path)
-    hooks = _extract_hooks(project_path)
-    rules = _extract_rules(project_path)
+    target_platform = get_target_platform(target)
+    hooks = _extract_hooks(project_path, target_platform)
+    rules = _extract_rules(project_path, target_platform)
     memory = _extract_memory(project_path)
-    skills_include, skills_exclude = _extract_skill_profile(project_path)
+    skills_include, skills_exclude = _extract_skill_profile(project_path, target_platform)
 
     return ProfileSchema(
         name=name,
@@ -34,9 +36,9 @@ def save_profile_yaml(profile: ProfileSchema, output_path: Path) -> None:
     )
 
 
-def _extract_hooks(project_path: Path) -> list[HookEntry]:
-    hooks_dir = project_path / ".claude" / "hooks"
-    settings_path = project_path / ".claude" / "settings.json"
+def _extract_hooks(project_path: Path, target_platform) -> list[HookEntry]:
+    hooks_dir = project_path / target_platform.config_dir / "hooks"
+    settings_path = project_path / target_platform.config_dir / target_platform.settings_file
     hooks = []
 
     if not hooks_dir.exists():
@@ -76,8 +78,8 @@ def _extract_hooks(project_path: Path) -> list[HookEntry]:
     return hooks
 
 
-def _extract_rules(project_path: Path) -> list[RuleEntry]:
-    rules_dir = project_path / ".claude" / "rules"
+def _extract_rules(project_path: Path, target_platform) -> list[RuleEntry]:
+    rules_dir = project_path / target_platform.config_dir / "rules"
     if not rules_dir.exists():
         return []
     return [
@@ -104,8 +106,9 @@ def _extract_memory(project_path: Path) -> list[MemoryTemplate]:
 
 def _extract_skill_profile(
     project_path: Path,
+    target_platform,
 ) -> tuple[list[str], list[str]]:
-    sp_path = project_path / ".claude" / "skill-profile.json"
+    sp_path = project_path / target_platform.config_dir / target_platform.skill_profile_file
     if not sp_path.exists():
         return [], []
     try:

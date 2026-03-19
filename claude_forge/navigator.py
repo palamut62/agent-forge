@@ -4,11 +4,13 @@ import json
 from pathlib import Path
 from rich.console import Console
 from .scanner import scan_available_skills
-from .config import load_config
+from .config import load_config, CONFIG_DIR, LEGACY_CONFIG_DIR
+from .targets import get_target_home, normalize_target
 
 console = Console()
 
-CACHE_FILE = Path.home() / ".claude-forge" / "skill_registry.json"
+CACHE_FILE = CONFIG_DIR / "skill_registry.json"
+LEGACY_CACHE_FILE = LEGACY_CONFIG_DIR / "skill_registry.json"
 
 KEYWORD_TAGS = {
     "python": ["python"],
@@ -44,10 +46,11 @@ KEYWORD_TAGS = {
 }
 
 
-def build_registry(claude_home: str | None = None) -> dict:
+def build_registry(home_dir: str | None = None, target: str = "claude") -> dict:
     """Tum skill'leri tara ve tag'li registry olustur."""
     config = load_config()
-    skills_info = scan_available_skills(claude_home or config.get("claude_home"))
+    resolved_target = normalize_target(target or config.get("default_target"))
+    skills_info = scan_available_skills(home_dir or get_target_home(config, resolved_target), target=resolved_target)
     registry: dict = {}
 
     for s in skills_info["global_skills"]:
@@ -101,6 +104,8 @@ def load_registry() -> dict:
     """Cache'ten yukle, yoksa olustur."""
     if CACHE_FILE.exists():
         return json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+    if LEGACY_CACHE_FILE.exists():
+        return json.loads(LEGACY_CACHE_FILE.read_text(encoding="utf-8"))
     return build_registry()
 
 

@@ -27,3 +27,10 @@ def test_context_compact_preview(tmp_path):
 
     preview = context_compact_preview(tmp_path)
     assert isinstance(preview, list)
+
+
+def test_context_status_codex_guide(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("# Codex Guide")
+    status = context_status(tmp_path, target="codex")
+    assert status["has_claude_md"] is True
+    assert status["guide_file"] == "AGENTS.md"

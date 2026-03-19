@@ -3,13 +3,18 @@
 import json
 from pathlib import Path
 
-CONFIG_DIR = Path.home() / ".claude-forge"
+CONFIG_DIR = Path.home() / ".agent-forge"
+LEGACY_CONFIG_DIR = Path.home() / ".claude-forge"
 CONFIG_FILE = CONFIG_DIR / "config.json"
+LEGACY_CONFIG_FILE = LEGACY_CONFIG_DIR / "config.json"
 
 DEFAULTS = {
     "openrouter_api_key": "",
     "default_model": "",
+    "default_target": "claude",
     "claude_home": str(Path.home() / ".claude"),
+    "codex_home": str(Path.home() / ".codex"),
+    "antigravity_home": str(Path.home() / ".antigravity"),
 }
 
 
@@ -17,6 +22,9 @@ def load_config() -> dict:
     """Config dosyasini oku."""
     if CONFIG_FILE.exists():
         data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        return {**DEFAULTS, **data}
+    if LEGACY_CONFIG_FILE.exists():
+        data = json.loads(LEGACY_CONFIG_FILE.read_text(encoding="utf-8"))
         return {**DEFAULTS, **data}
     return dict(DEFAULTS)
 

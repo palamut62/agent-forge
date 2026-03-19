@@ -1,0 +1,280 @@
+version: 1
+name: springboot
+description: "Java 21+ / Kotlin, Spring Boot 3, JPA ile backend gelistirme"
+extends: base
+languages: [java, kotlin]
+frameworks: [spring-boot, jpa]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir Spring Boot backend gelistiricisisin.
+    Temiz, test edilebilir, uretim kalitesinde Java/Kotlin + Spring Boot kodu yazarsin.
+    Her degisiklikte SOLID prensipleri, guvenlik ve olceklenebilirlik onceligindir.
+  project_overview: |
+    Bu bir Spring Boot 3 tabanli REST API projesidir.
+    Java 21+ veya Kotlin ile yazilir, JPA/Hibernate ile veritabani erisimi saglanir.
+    Katmanli mimari (Controller-Service-Repository) ile yapilandirilmistir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Java 21+ / Kotlin, Spring Boot 3.2+, Spring Data JPA, PostgreSQL, Flyway, MapStruct, JUnit 5, Testcontainers"
+  coding_standards: |
+    - Constructor injection kullan, `@Autowired` field injection KULLANMA
+    - Record class (Java) veya data class (Kotlin) DTO'lar icin kullan
+    - `Optional` return type kullan, null dondurme (repository method'lari)
+    - `var` keyword'unu local degiskenlerde kullan (Java 21+)
+    - Lombok: sadece `@Slf4j`, `@Builder`, `@Getter` kullan; `@Data` entity'lerde KULLANMA
+    - Entity class'larinda `equals()` ve `hashCode()` id bazli override et
+    - DTO <-> Entity donusumu icin MapStruct kullan, manuel mapping YAPMA
+    - Service method'lari `@Transactional` ile isaretle (readonly icin `readOnly = true`)
+    - Validation: `@Valid` + Jakarta Bean Validation annotation'lari kullan
+    - Package isimleri lowercase: `com.app.user`, `com.app.auth`
+    - Test class isimleri: `UserServiceTest`, `UserControllerIT` (integration test)
+    - Profile'lar: `application-dev.yml`, `application-prod.yml`
+  architecture: |
+    ```
+    src/main/java/com/app/
+    ├── Application.java           # @SpringBootApplication entry point
+    ├── config/
+    │   ├── SecurityConfig.java    # Spring Security config
+    │   ├── WebConfig.java         # CORS, interceptors
+    │   └── JpaConfig.java         # JPA/auditing config
+    ├── controller/
+    │   ├── UserController.java    # REST endpoint'leri
+    │   └── advice/
+    │       └── GlobalExceptionHandler.java
+    ├── service/
+    │   ├── UserService.java       # Interface
+    │   └── impl/
+    │       └── UserServiceImpl.java
+    ├── repository/
+    │   └── UserRepository.java    # Spring Data JPA interface
+    ├── entity/
+    │   ├── User.java              # JPA entity
+    │   └── BaseEntity.java        # Auditing base class
+    ├── dto/
+    │   ├── request/
+    │   │   └── UserCreateRequest.java
+    │   └── response/
+    │       └── UserResponse.java
+    ├── mapper/
+    │   └── UserMapper.java        # MapStruct mapper
+    ├── exception/
+    │   ├── ResourceNotFoundException.java
+    │   └── BusinessException.java
+    └── security/
+        ├── JwtTokenProvider.java
+        └── JwtAuthFilter.java
+    ```
+  hard_boundaries: |
+    - `@Autowired` field injection KULLANMA, constructor injection kullan
+    - Entity class'lari DTO olarak DONDURME, ayri DTO kullan
+    - Controller'da business logic YAZMA, service katmanina tasi
+    - Native query YAZMA (zorunlu degilse), JPQL veya Criteria API kullan
+    - `application.yml`'a secret KOYMA, environment variable veya vault kullan
+    - `@Data` annotation'unu JPA entity'lerde KULLANMA (proxy sorunu)
+    - `CascadeType.ALL` dikkatli kullan, orphanRemoval ile birlikte dusun
+  error_handling: |
+    - `@RestControllerAdvice` ile global exception handler tanimla
+    - Custom exception class'lari olustur: `ResourceNotFoundException`, `BusinessException`
+    - HTTP status code'lari dogru kullan: 201 create, 204 delete, 404 not found
+    - Validation hatalari icin `MethodArgumentNotValidException` handle et
+    - Transaction rollback stratejisini belirle (checked vs unchecked exception)
+    - Ornek:
+      ```java
+      // exception/ResourceNotFoundException.java
+      public class ResourceNotFoundException extends RuntimeException {
+          public ResourceNotFoundException(String resource, Object id) {
+              super("%s bulunamadi: %s".formatted(resource, id));
+          }
+      }
+
+      // controller/advice/GlobalExceptionHandler.java
+      @RestControllerAdvice
+      @Slf4j
+      public class GlobalExceptionHandler {
+
+          @ExceptionHandler(ResourceNotFoundException.class)
+          public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex) {
+              return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                  .body(new ErrorResponse(ex.getMessage()));
+          }
+
+          @ExceptionHandler(MethodArgumentNotValidException.class)
+          public ResponseEntity<ErrorResponse> handleValidation(
+                  MethodArgumentNotValidException ex) {
+              var errors = ex.getBindingResult().getFieldErrors().stream()
+                  .map(e -> "%s: %s".formatted(e.getField(), e.getDefaultMessage()))
+                  .toList();
+              return ResponseEntity.badRequest()
+                  .body(new ErrorResponse("Validation hatasi", errors));
+          }
+      }
+
+      record ErrorResponse(String message, List<String> details) {
+          ErrorResponse(String message) { this(message, List.of()); }
+      }
+      ```
+  test_command: "./gradlew test --info"
+  lint_command: "./gradlew checkstyleMain spotbugsMain"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.java ]]; then
+        google-java-format --replace "$FILE_PATH" 2>/dev/null || true
+      elif [[ "$FILE_PATH" == *.kt ]]; then
+        ktlint --format "$FILE_PATH" 2>/dev/null || true
+      fi
+
+rules:
+  - name: dependency-injection.md
+    content: |
+      ---
+      description: Spring dependency injection kurallari
+      ---
+      ## Dependency Injection
+      - Constructor injection ZORUNLU, `@Autowired` field injection YASAK
+      - Tek constructor varsa `@Autowired` annotation gereksiz (Spring otomatik yapar)
+      - Interface'e program yap, concrete class'a degil
+      - `@Qualifier` ile ayni tip'ten birden fazla bean varsa belirt
+      - Test'lerde `@MockBean` veya constructor ile mock inject et
+
+      ### Ornek
+      ```java
+      // YANLIS
+      @Service
+      public class UserService {
+          @Autowired
+          private UserRepository userRepo; // field injection!
+      }
+
+      // DOGRU
+      @Service
+      @RequiredArgsConstructor
+      public class UserService {
+          private final UserRepository userRepo; // constructor injection
+      }
+      ```
+
+  - name: transaction-management.md
+    content: |
+      ---
+      description: Transaction yonetim kurallari
+      ---
+      ## Transaction Management
+      - Service method'lari `@Transactional` ile isaretle
+      - Sadece okuma yapan method'lar: `@Transactional(readOnly = true)`
+      - Controller'da `@Transactional` KULLANMA, service'te kullan
+      - Self-invocation sorunu: ayni class icinde @Transactional method cagirilmaz (proxy)
+      - Checked exception'da rollback icin: `@Transactional(rollbackFor = Exception.class)`
+
+      ### Ornek
+      ```java
+      @Service
+      @RequiredArgsConstructor
+      public class OrderService {
+          private final OrderRepository orderRepo;
+          private final PaymentService paymentService;
+
+          @Transactional
+          public Order createOrder(OrderCreateRequest request) {
+              var order = orderRepo.save(Order.from(request));
+              paymentService.processPayment(order);
+              return order;
+          }
+
+          @Transactional(readOnly = true)
+          public Page<Order> findAll(Pageable pageable) {
+              return orderRepo.findAll(pageable);
+          }
+      }
+      ```
+
+  - name: validation.md
+    content: |
+      ---
+      description: Request validation kurallari
+      ---
+      ## Validation
+      - DTO'larda Jakarta Bean Validation annotation kullan
+      - Controller'da `@Valid` ile validation tetikle
+      - Custom validator olustur karmasik kurallar icin
+      - Validation hata mesajlari Turkce olsun
+
+      ### Ornek
+      ```java
+      public record UserCreateRequest(
+          @NotBlank(message = "Isim bos olamaz")
+          @Size(min = 2, max = 50, message = "Isim 2-50 karakter olmali")
+          String name,
+
+          @NotBlank(message = "Email bos olamaz")
+          @Email(message = "Gecerli bir email adresi girin")
+          String email,
+
+          @NotBlank(message = "Sifre bos olamaz")
+          @Size(min = 8, message = "Sifre en az 8 karakter olmali")
+          String password
+      ) {}
+
+      @PostMapping
+      public ResponseEntity<UserResponse> create(@Valid @RequestBody UserCreateRequest request) {
+          var user = userService.create(request);
+          return ResponseEntity.status(HttpStatus.CREATED).body(user);
+      }
+      ```
+
+skills_include:
+  - tdd-workflow
+  - security-review
+  - springboot-patterns
+  - jpa-patterns
+  - backend-patterns
+  - docker-patterns
+  - database-patterns
+
+skills_exclude:
+  - "python-*"
+  - "golang-*"
+  - "rust-*"
+  - "swift-*"
+  - "flutter-*"
+  - "react-*"
+  - "vue-*"
+  - "django-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Katman Yapisi
+      Controller -> Service -> Repository -> Database
+      DTO <-> Entity donusumu MapStruct ile.
+
+      ## Module Yapisi
+      _(Multi-module ise modul listesi)_
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: api-contracts.md
+    content: |
+      # API Sozlesmeleri
+
+      ## Endpoint Listesi
+      _(REST endpoint'leri, method, path, request/response)_
+
+      ## DTO'lar
+      _(Request ve Response record/class'lari)_
+
+  - name: database-schema.md
+    content: |
+      # Veritabani Semasi
+
+      ## Entity'ler
+      _(JPA entity class'lari ve iliskileri)_
+
+      ## Migration'lar
+      _(Flyway migration gecmisi)_

@@ -1,32 +1,44 @@
 """Apply a profile to a project directory."""
 
 import json
+import shutil
 from pathlib import Path
 from datetime import date
 from rich.console import Console
 from rich.prompt import Confirm
 from .schema import ProfileSchema
+from ..targets import get_target_platform
 
 console = Console()
 
 
 def apply_profile(
-    profile: ProfileSchema, project_path: Path, interactive: bool = True
+    profile: ProfileSchema,
+    project_path: Path,
+    interactive: bool = True,
+    target: str = "claude",
+    target_home: str | None = None,
 ) -> None:
     """Profili projeye uygula -- dosya yapisi olustur."""
     project_path = Path(project_path)
+    target_platform = get_target_platform(target)
+    config_dir = target_platform.config_dir
 
-    for d in [".claude/hooks", ".claude/rules", ".claude/skills", "memory"]:
+    for d in [f"{config_dir}/hooks", f"{config_dir}/rules", f"{config_dir}/skills", "memory"]:
         (project_path / d).mkdir(parents=True, exist_ok=True)
 
-    # CLAUDE.md
-    claude_md = _render_claude_md(profile, project_path.name)
-    _safe_write(project_path / "CLAUDE.md", claude_md, interactive)
+    guide_md = _render_guide(profile, project_path.name, target_platform.label)
+    _safe_write(project_path / target_platform.guide_file, guide_md, interactive)
 
     # Hooks
+    bundled_hooks_dir = Path(__file__).parent.parent / "hooks"
     for hook in profile.hooks:
-        hook_content = _render_hook_script(hook.name, hook.command)
-        hook_path = project_path / ".claude" / "hooks" / hook.name
+        hook_path = project_path / config_dir / "hooks" / hook.name
+        if hook.bundled and (bundled_hooks_dir / hook.name).exists():
+            # Bundled hook: dosyayi olduğu gibi kopyala
+            hook_content = (bundled_hooks_dir / hook.name).read_text(encoding="utf-8")
+        else:
+            hook_content = _render_hook_script(hook.name, hook.command, hook.event)
         _safe_write(hook_path, hook_content, interactive, newline="\n")
         try:
             hook_path.chmod(0o755)
@@ -34,9 +46,9 @@ def apply_profile(
             pass
 
     # settings.json
-    settings = _render_settings(profile)
+    settings = _render_settings(profile, target_platform)
     _safe_write(
-        project_path / ".claude" / "settings.json",
+        project_path / config_dir / target_platform.settings_file,
         json.dumps(settings, indent=2, ensure_ascii=False),
         interactive,
     )
@@ -44,7 +56,7 @@ def apply_profile(
     # Rules
     for rule in profile.rules:
         _safe_write(
-            project_path / ".claude" / "rules" / rule.name, rule.content, interactive
+            project_path / config_dir / "rules" / rule.name, rule.content, interactive
         )
 
     # Memory
@@ -53,35 +65,60 @@ def apply_profile(
 
     # Skill profile
     skill_profile = {
-        "generated_by": "claude-forge",
+        "generated_by": "agent-forge",
         "generated_at": str(date.today()),
         "profile": profile.name,
         "active_skills": profile.skills_include,
         "excluded_patterns": profile.skills_exclude,
     }
     _safe_write(
-        project_path / ".claude" / "skill-profile.json",
+        project_path / config_dir / target_platform.skill_profile_file,
         json.dumps(skill_profile, indent=2, ensure_ascii=False),
         interactive,
     )
+    copied = _copy_profile_skills(
+        project_path,
+        target_platform,
+        profile.skills_include,
+        target_home=target_home,
+    )
+    if copied:
+        console.print(f"  [green][OK][/green] Copied skills: {', '.join(copied)}")
 
     console.print(f"\n[green bold]Profil '{profile.name}' uygulandi![/green bold]")
 
 
-def _render_claude_md(profile: ProfileSchema, project_name: str) -> str:
-    sections = [f"# {project_name} -- Claude Guide\n"]
+def _render_guide(profile: ProfileSchema, project_name: str, target_label: str) -> str:
+    sections = [f"# {project_name} -- {target_label} Guide\n"]
+
+    if profile.claude_md.role:
+        sections.append(f"## Your Role\n{profile.claude_md.role}\n")
+
+    if profile.claude_md.project_overview:
+        sections.append(f"## Project Overview\n{profile.claude_md.project_overview}\n")
 
     if profile.claude_md.tech_stack:
         sections.append(f"## Tech Stack\n{profile.claude_md.tech_stack}\n")
 
+    if profile.claude_md.architecture:
+        sections.append(f"## Architecture\n{profile.claude_md.architecture}\n")
+
     if profile.claude_md.coding_standards:
         sections.append(f"## Coding Standards\n{profile.claude_md.coding_standards}\n")
 
-    sections.append(
-        "## Hard Boundaries\n- Never edit .env files\n"
-        "- Never commit directly to main/master\n"
-        "- Never add features without tests\n"
-    )
+    if profile.claude_md.hard_boundaries:
+        sections.append(f"## Hard Boundaries (NEVER Do These)\n{profile.claude_md.hard_boundaries}\n")
+    else:
+        sections.append(
+            "## Hard Boundaries (NEVER Do These)\n"
+            "- .env dosyalarini ASLA duzenleme\n"
+            "- main/master branch'e direkt commit YAPMA\n"
+            "- Test olmadan yeni ozellik ekleme\n"
+            "- Secret/password iceren degerleri hardcode yapma\n"
+        )
+
+    if profile.claude_md.error_handling:
+        sections.append(f"## Error Handling\n{profile.claude_md.error_handling}\n")
 
     if profile.claude_md.test_command:
         sections.append(
@@ -98,7 +135,8 @@ def _render_claude_md(profile: ProfileSchema, project_name: str) -> str:
         sections.append(f"## Recommended Skills\n{skills_text}\n")
 
     sections.append(
-        "## Memory System\nRead `memory/MEMORY.md` at the start of every session.\n"
+        "## Memory System\n"
+        "Read `memory/MEMORY.md` at the start of every session.\n"
         "Update relevant memory files when discovering important findings.\n"
     )
 
@@ -108,36 +146,40 @@ def _render_claude_md(profile: ProfileSchema, project_name: str) -> str:
     return "\n".join(sections)
 
 
-def _render_hook_script(name: str, command: str) -> str:
-    return (
-        f"#!/bin/bash\n"
-        f"# Hook: {name}\n"
-        f'FILE_PATH=$(echo "$CLAUDE_TOOL_INPUT" | python3 -c '
-        f'"import json,sys; d=json.load(sys.stdin); print(d.get(\'path\',\'\'))" '
-        f"2>/dev/null)\n"
-        f"{command}\n"
-        f"exit 0\n"
-    )
+def _render_hook_script(name: str, command: str, event: str = "") -> str:
+    lines = ["#!/bin/bash", f"# Hook: {name}"]
+    # PreToolUse/PostToolUse hook'lari FILE_PATH'e ihtiyac duyar
+    # SessionStart/PreCompact/Stop hook'lari duymaz
+    tool_events = {"PreToolUse", "PostToolUse"}
+    if event in tool_events:
+        lines.append(
+            'FILE_PATH=$(echo "$CLAUDE_TOOL_INPUT" | python3 -c '
+            '"import json,sys; d=json.load(sys.stdin); print(d.get(\'path\',\'\'))" '
+            '2>/dev/null)'
+        )
+    lines.append(command)
+    lines.append("exit 0")
+    return "\n".join(lines) + "\n"
 
 
-def _render_settings(profile: ProfileSchema) -> dict:
+def _render_settings(profile: ProfileSchema, target_platform) -> dict:
     settings: dict = {"hooks": {}}
     for hook in profile.hooks:
         event = hook.event
         if event not in settings["hooks"]:
             settings["hooks"][event] = []
-        settings["hooks"][event].append(
-            {
-                "matcher": hook.matcher,
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": f"bash .claude/hooks/{hook.name}",
-                        "timeout": 10,
-                    }
-                ],
-            }
-        )
+        entry: dict = {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": f"bash {target_platform.config_dir}/hooks/{hook.name}",
+                    "timeout": 10,
+                }
+            ],
+        }
+        if hook.matcher:
+            entry["matcher"] = hook.matcher
+        settings["hooks"][event].append(entry)
     return settings
 
 
@@ -157,3 +199,30 @@ def _safe_write(
     else:
         path.write_text(content, encoding="utf-8")
     console.print(f"  [green][OK][/green] {path.name}")
+
+
+def _copy_profile_skills(
+    project_path: Path,
+    target_platform,
+    skill_names: list[str],
+    target_home: str | None = None,
+) -> list[str]:
+    """Copy selected profile skills from target home to project."""
+    if not skill_names:
+        return []
+
+    source_home = Path(target_home) if target_home else Path.home() / target_platform.default_home_dir
+    source_skills = source_home / "skills"
+    if not source_skills.exists():
+        return []
+
+    dest_skills = project_path / target_platform.config_dir / "skills"
+    copied: list[str] = []
+    for name in skill_names:
+        src = source_skills / name
+        if not src.is_dir():
+            continue
+        dst = dest_skills / name
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        copied.append(name)
+    return copied

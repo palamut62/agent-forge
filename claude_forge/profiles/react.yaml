@@ -6,22 +6,211 @@ languages: [node]
 frameworks: [react]
 
 claude_md:
-  tech_stack: "React 18+, TypeScript, Vite/Next.js"
+  role: |
+    Sen bu projede calisan kidemli bir frontend gelistiricisisin.
+    Temiz, performansli, erisilebilir React + TypeScript kodu yazarsin.
+    Her degisiklikte kullanici deneyimi, performans ve tip guvenligi onceligindir.
+  project_overview: |
+    Bu bir React 19+ tabanli modern frontend projesidir.
+    TypeScript strict mode, component-driven mimari ve modern hook pattern'leri kullanir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "React 19+, TypeScript 5+, Vite/Next.js, React Router, Zustand/Jotai, TanStack Query, Tailwind CSS"
   coding_standards: |
-    - TypeScript strict mode
-    - No any type
-    - Functional components + hooks
-    - CSS Modules veya Tailwind
-  test_command: "npm test"
+    - TypeScript strict mode zorunlu, `any` tipi ASLA kullanma
+    - Sadece functional component yaz, class component YASAK
+    - Custom hook'lar `hooks/` altinda, `use` prefix'i ile isimlendir
+    - Props icin interface tanimla, inline type kullanma
+    - State yonetimi: lokal state icin useState, global icin Zustand/Jotai
+    - Server state icin TanStack Query kullan (manuel fetch YASAK)
+    - CSS: Tailwind CSS veya CSS Modules kullan, inline style YASAK (tek seferlik hariç)
+    - Import sirasi: react -> third-party -> local components -> hooks -> utils -> types -> styles
+    - Dosya isimleri: component'ler PascalCase.tsx, hook/util'ler camelCase.ts
+    - Her component tek bir is yapsin, 150 satirdan buyuk component'i parcala
+    - Memo kullan: React.memo() sadece olcumle kanitlanmis performans sorunlarinda
+  architecture: |
+    ```
+    src/
+    ├── app/                     # Next.js app router VEYA main entry
+    │   ├── layout.tsx           # Root layout
+    │   └── page.tsx             # Ana sayfa
+    ├── components/
+    │   ├── ui/                  # Genel UI component'leri (Button, Input, Modal)
+    │   ├── layout/              # Header, Footer, Sidebar
+    │   └── features/            # Ozellige ozel component'ler
+    │       └── <feature>/       # Her feature kendi klasorunde
+    │           ├── FeatureCard.tsx
+    │           ├── FeatureList.tsx
+    │           └── index.ts     # Barrel export
+    ├── hooks/                   # Custom hook'lar
+    │   └── use<Hook>.ts
+    ├── services/                # API cagrilari
+    │   └── <resource>.ts
+    ├── stores/                  # Global state (Zustand/Jotai)
+    │   └── <store>.ts
+    ├── types/                   # Paylasilan TypeScript tipleri
+    │   └── <domain>.ts
+    ├── utils/                   # Yardimci fonksiyonlar
+    │   └── <util>.ts
+    └── lib/                     # Third-party config (axios instance, query client)
+        └── queryClient.ts
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme
+    - `any` tipi ASLA kullanma, `unknown` veya spesifik tip kullan
+    - Class component YAZMA, sadece functional component
+    - useEffect icinde dogrudan API cagirma, TanStack Query kullan
+    - index.tsx dosyasina component kodu YAZMA (sadece re-export)
+    - node_modules/ veya build/ klasorlerini duzenleme
+    - Secret/API key'leri client-side koda koyma
+    - console.log birakma (gelistirme harici)
+  error_handling: |
+    - Error Boundary component'i kullan (React 19 ile birlikte gelen)
+    - API hatalarini TanStack Query'nin onError callback'inde handle et
+    - Kullaniciya gosterilen hata mesajlari Turkce ve anlasilir olsun
+    - Loading ve error state'leri her sayfada handle et (skeleton UI tercih et)
+    - Form validation hatalarini anlinda goster (onChange/onBlur)
+    - Network hatalarinda retry mekanizmasi kullan
+    - Ornek:
+      ```tsx
+      function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
+        return (
+          <div role="alert">
+            <p>Bir hata olustu: {error.message}</p>
+            <button onClick={resetErrorBoundary}>Tekrar Dene</button>
+          </div>
+        );
+      }
+      ```
+  test_command: "npx vitest run"
   lint_command: "npx eslint --fix . && npx prettier --write ."
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.ts || "$FILE_PATH" == *.tsx ]]; then
+        npx eslint --fix "$FILE_PATH" 2>/dev/null
+        npx prettier --write "$FILE_PATH" 2>/dev/null
+      fi
 
 rules:
   - name: no-any.md
     content: |
       ---
-      description: any type kullanma
+      description: any type kullanma, tip guvenligini koru
       ---
-      TypeScript'te asla any type kullanma. unknown veya spesifik tip kullan.
+      ## No Any Kurali
+      - TypeScript'te `any` tipi ASLA kullanma
+      - `unknown` veya spesifik tip kullan
+      - Third-party kutuphaneden gelen `any` icin wrapper type yaz
+      - Generic'leri dogru kullan, `any` ile bypass etme
+      - Event handler'larda `React.MouseEvent<HTMLButtonElement>` gibi spesifik tip kullan
+
+      ### Ornek
+      ```tsx
+      // YANLIS
+      const handleClick = (e: any) => { ... }
+      const data: any = await fetchData();
+      function process(items: any[]) { ... }
+
+      // DOGRU
+      const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => { ... }
+      const data: UserResponse = await fetchData();
+      function process(items: Product[]) { ... }
+
+      // Third-party any icin wrapper
+      type SafeChartData = {
+        labels: string[];
+        datasets: { data: number[]; label: string }[];
+      };
+      ```
+
+  - name: component-patterns.md
+    content: |
+      ---
+      description: React component yazim kurallari
+      ---
+      ## Component Kurallari
+      - Sadece functional component yaz, class component YASAK
+      - Props icin interface tanimla ve export et
+      - Destructure props, `props.x` erisimi kullanma
+      - Children prop gerekiyorsa `React.PropsWithChildren` kullan
+      - Default prop'lari destructure'da ver
+      - Component basina tek dosya, dosya adi = component adi (PascalCase)
+      - Custom hook'lar `use` prefix'i ile baslasin
+
+      ### Ornek
+      ```tsx
+      // YANLIS
+      class UserCard extends React.Component { ... }
+      const UserCard = (props: any) => <div>{props.name}</div>;
+
+      // DOGRU
+      interface UserCardProps {
+        name: string;
+        email: string;
+        role?: "admin" | "user";
+      }
+
+      export function UserCard({ name, email, role = "user" }: UserCardProps) {
+        return (
+          <div>
+            <h3>{name}</h3>
+            <p>{email}</p>
+            <span>{role}</span>
+          </div>
+        );
+      }
+      ```
+
+      ### Custom Hook Ornegi
+      ```tsx
+      // hooks/useDebounce.ts
+      export function useDebounce<T>(value: T, delay: number): T {
+        const [debouncedValue, setDebouncedValue] = useState(value);
+
+        useEffect(() => {
+          const timer = setTimeout(() => setDebouncedValue(value), delay);
+          return () => clearTimeout(timer);
+        }, [value, delay]);
+
+        return debouncedValue;
+      }
+      ```
+
+  - name: styling-rules.md
+    content: |
+      ---
+      description: CSS ve stil kurallari
+      ---
+      ## Stil Kurallari
+      - Tailwind CSS veya CSS Modules kullan
+      - Inline style YASAK (animasyon veya dinamik deger haric)
+      - Global CSS sadece reset/base icin, component bazli stil kullan
+      - Tailwind'de uzun class listeleri icin `cn()` / `clsx()` helper kullan
+      - Responsive tasarim: mobile-first yaklasim (sm -> md -> lg -> xl)
+      - Dark mode destegi: `dark:` prefix kullan
+      - Magic number kullanma, design token/variable kullan
+
+      ### Ornek
+      ```tsx
+      // YANLIS
+      <div style={{ marginTop: 16, color: '#333' }}>
+
+      // DOGRU (Tailwind)
+      <div className="mt-4 text-gray-700 dark:text-gray-300">
+
+      // DOGRU (dinamik class)
+      import { cn } from "@/lib/utils";
+
+      <button className={cn(
+        "px-4 py-2 rounded-md font-medium",
+        variant === "primary" && "bg-blue-600 text-white",
+        variant === "ghost" && "bg-transparent hover:bg-gray-100",
+        disabled && "opacity-50 cursor-not-allowed"
+      )}>
+      ```
 
 skills_include:
   - frontend-patterns
@@ -39,3 +228,41 @@ skills_exclude:
   - "swift-*"
   - "perl-*"
   - "springboot-*"
+  - "jpa-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Frontend Mimari Kararlar
+
+      ## Component Hiyerarsisi
+      App -> Layout -> Page -> Feature Components -> UI Components
+      Her katman sadece alt katmani kullanir, katman atlama YASAK.
+
+      ## State Yonetimi
+      - Lokal: useState/useReducer
+      - Global: Zustand/Jotai
+      - Server: TanStack Query
+
+      ## Routing
+      _(React Router veya Next.js App Router - projeye gore sec)_
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: component-registry.md
+    content: |
+      # Component Kayit Defteri
+
+      ## UI Components (src/components/ui/)
+      | Component | Props | Kullanim |
+      |-----------|-------|----------|
+      _(Her yeni UI component eklendikce buraya yazilir)_
+
+      ## Feature Components
+      _(Ozellige ozel component'ler)_
+
+      ## Custom Hooks (src/hooks/)
+      | Hook | Parametre | Donus | Aciklama |
+      |------|-----------|-------|----------|
+      _(Her yeni hook eklendikce buraya yazilir)_

@@ -1,0 +1,260 @@
+version: 1
+name: vue
+description: "Vue 3 Composition API, TypeScript, Pinia, Vite projesi"
+extends: base
+languages: [typescript, javascript]
+frameworks: [vue, pinia, vite]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir Vue.js frontend gelistiricisisin.
+    Temiz, reactive, tip-guvenli Vue 3 Composition API kodu yazarsin.
+    Her degisiklikte performans, erisilebilirlik ve kod tekrar kullanilabilirligi onceligindir.
+  project_overview: |
+    Bu bir Vue 3 + TypeScript tabanli SPA/SSR web uygulamasidir.
+    Composition API ve <script setup> syntax kullanilir.
+    State yonetimi Pinia ile, build sistemi Vite ile saglanir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Vue 3.4+, TypeScript 5, Pinia, Vue Router, Vite 5, Vitest, VueUse"
+  coding_standards: |
+    - Composition API + `<script setup>` zorunlu, Options API KULLANMA
+    - TypeScript strict mode, `any` tipi YASAK
+    - `ref()` primitifler icin, `reactive()` sadece karmasik objeler icin kullan
+    - Computed property'leri `computed()` ile tanimla, template icinde hesaplama YAPMA
+    - Props'lari `defineProps<T>()` ile type-safe tanimla
+    - Emit'leri `defineEmits<T>()` ile type-safe tanimla
+    - Composable isimleri `use` prefix'i ile: `useAuth()`, `useCart()`
+    - Component isimleri PascalCase, multi-word zorunlu: `UserCard.vue`, `AppHeader.vue`
+    - Dosya isimleri PascalCase: `UserProfile.vue`, `useAuth.ts`
+    - Store'lari Setup syntax ile tanimla (Options syntax degil)
+    - Template'de v-for ile v-if'i ayni element'te BIRLESTIRME
+    - Key prop'unu v-for'da HER ZAMAN belirt, index kullanma
+  architecture: |
+    ```
+    src/
+    ├── App.vue                  # Root component
+    ├── main.ts                  # App init, plugin register
+    ├── router/
+    │   └── index.ts             # Vue Router tanimlari
+    ├── stores/
+    │   ├── auth.ts              # Auth store (Pinia)
+    │   └── <domain>.ts          # Domain bazli store'lar
+    ├── views/
+    │   ├── HomeView.vue         # Sayfa component'leri
+    │   └── dashboard/
+    │       └── DashboardView.vue
+    ├── components/
+    │   ├── ui/                  # Genel UI (BaseButton, BaseInput)
+    │   ├── forms/               # Form bilesenleri
+    │   └── layout/              # TheHeader, TheSidebar, TheFooter
+    ├── composables/
+    │   ├── useAuth.ts           # Auth composable
+    │   └── useFetch.ts          # HTTP composable
+    ├── services/
+    │   └── api.ts               # API client (axios/fetch wrapper)
+    ├── types/
+    │   └── index.ts             # Global type tanimlari
+    └── utils/
+        └── helpers.ts           # Yardimci fonksiyonlar
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme
+    - Options API KULLANMA, her zaman Composition API + <script setup>
+    - `any` tipi ASLA kullanma
+    - `this` keyword'unu KULLANMA (Composition API'de gereksiz)
+    - Global state icin window/global KULLANMA, Pinia store kullan
+    - Template icinde karmasik logic YAZMA, computed veya method kullan
+    - node_modules/ veya dist/ dizinlerini COMMIT etme
+  error_handling: |
+    - Global error handler `app.config.errorHandler` ile tanimla
+    - API isteklerinde try-catch ile hata yakala, kullaniciya Turkce mesaj goster
+    - Component seviyesinde `onErrorCaptured` lifecycle hook kullan
+    - Form validation hatalarini alan bazinda goster (VeeValidate veya manuel)
+    - Loading ve error state'lerini her async islemde yonet
+    - Ornek:
+      ```typescript
+      // composables/useFetch.ts
+      export function useFetch<T>(url: string) {
+        const data = ref<T | null>(null);
+        const error = ref<string | null>(null);
+        const loading = ref(false);
+
+        async function execute() {
+          loading.value = true;
+          error.value = null;
+          try {
+            const response = await api.get<T>(url);
+            data.value = response.data;
+          } catch (e) {
+            error.value = e instanceof ApiError
+              ? e.message
+              : "Beklenmeyen bir hata olustu";
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        return { data, error, loading, execute };
+      }
+      ```
+  test_command: "npx vitest run --coverage"
+  lint_command: "npx eslint --fix src/ && npx prettier --write src/"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.vue ]] || [[ "$FILE_PATH" == *.ts ]]; then
+        npx prettier --write "$FILE_PATH" 2>/dev/null
+        npx eslint --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: composition-api.md
+    content: |
+      ---
+      description: Composition API ve script setup kurallari
+      ---
+      ## Composition API Kurallari
+      - HER ZAMAN `<script setup lang="ts">` kullan
+      - Options API (data, methods, computed, watch) KULLANMA
+      - Reactive state: `ref()` primitifler, `reactive()` karmasik objeler icin
+      - Side effect'ler icin `watch()` veya `watchEffect()` kullan
+      - Lifecycle: `onMounted()`, `onUnmounted()` fonksiyonlarini kullan
+      - Tekrar eden logic'i composable'a cikar (`use` prefix)
+
+      ### Ornek
+      ```vue
+      <script setup lang="ts">
+      import { ref, computed, onMounted } from "vue";
+      import { useAuth } from "@/composables/useAuth";
+
+      const { user, isAuthenticated } = useAuth();
+      const count = ref(0);
+      const doubled = computed(() => count.value * 2);
+
+      function increment() {
+        count.value++;
+      }
+
+      onMounted(() => {
+        console.log("Component mounted");
+      });
+      </script>
+      ```
+
+  - name: type-safety.md
+    content: |
+      ---
+      description: Vue TypeScript type safety kurallari
+      ---
+      ## Type Safety
+      - Props'lari generic defineProps ile tanimla
+      - Emit'leri generic defineEmits ile tanimla
+      - Template ref'lerde `ref<HTMLElement | null>(null)` kullan
+      - Store state'lerinde explicit type belirt
+
+      ### Ornek
+      ```vue
+      <script setup lang="ts">
+      interface Props {
+        title: string;
+        count?: number;
+        items: Item[];
+      }
+
+      interface Emits {
+        (e: "update", value: string): void;
+        (e: "delete", id: number): void;
+      }
+
+      const props = withDefaults(defineProps<Props>(), {
+        count: 0,
+      });
+
+      const emit = defineEmits<Emits>();
+      </script>
+      ```
+
+  - name: reactive-patterns.md
+    content: |
+      ---
+      description: Vue reactive state yonetim kaliplari
+      ---
+      ## Reactive Patterns
+      - `ref()` kullandiginda `.value` ile eris (template'de otomatik unwrap)
+      - `reactive()` objesini destructure ETME (reaktivite kaybolur)
+      - `toRefs()` ile reactive objeyi guvenle destructure et
+      - `shallowRef()` buyuk objeler icin performans optimizasyonu
+      - `readonly()` ile state'i disariya salt okunur olarak ac
+
+      ### Ornek
+      ```typescript
+      // YANLIS - reaktivite kaybolur
+      const state = reactive({ count: 0, name: "test" });
+      const { count, name } = state; // REAKTIF DEGIL!
+
+      // DOGRU - toRefs ile destructure
+      const { count, name } = toRefs(state); // ref olarak kalir
+
+      // Store'da readonly pattern
+      export function useCounter() {
+        const count = ref(0);
+        const increment = () => count.value++;
+        return { count: readonly(count), increment };
+      }
+      ```
+
+skills_include:
+  - frontend-patterns
+  - web-design-guidelines
+  - tdd-workflow
+  - typescript-patterns
+  - vite-patterns
+  - vue-patterns
+
+skills_exclude:
+  - "python-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "golang-*"
+  - "rust-*"
+  - "springboot-*"
+  - "react-*"
+  - "nextjs-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Component Yapisi
+      Views -> Components -> UI Components
+      State yonetimi Pinia store'lari ile.
+
+      ## Composable'lar
+      _(Olusturulan composable listesi)_
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: routes.md
+    content: |
+      # Route Listesi
+
+      ## Sayfalar
+      _(Vue Router route tanimlari)_
+
+      ## Navigation Guards
+      _(Auth ve yetki kontrolleri)_
+
+  - name: store-inventory.md
+    content: |
+      # Pinia Store Envanteri
+
+      ## Store'lar
+      _(Her store ve sorumlulugu)_
+
+      ## Store Iliskileri
+      _(Store'lar arasi bagimliliklar)_

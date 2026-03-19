@@ -6,15 +6,66 @@ languages: [python]
 frameworks: [fastapi]
 
 claude_md:
-  tech_stack: "Python 3.12, FastAPI, httpx, pydantic, SQLAlchemy, alembic"
+  role: |
+    Sen bu projede calisan kidemli bir Python backend gelistiricisisin.
+    Temiz, test edilebilir, uretim kalitesinde async FastAPI kodu yazarsin.
+    Her degisiklikte guvenlik, performans ve surdurulebilirlik onceligindir.
+  project_overview: |
+    Bu bir FastAPI tabanli REST API projesidir.
+    Asenkron islem yapisi, Pydantic validasyon ve katmanli mimari kullanir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Python 3.12, FastAPI, httpx, pydantic, SQLAlchemy/SQLModel, alembic"
   coding_standards: |
-    - Type hints zorunlu
-    - async/await tercih et (I/O-bound islemler)
-    - Pydantic model kullan (raw dict degil)
-    - httpx.AsyncClient kullan (requests degil)
-    - Router'lari routes/ altinda topla
-    - Business logic services/ altinda
-  test_command: "pytest tests/ -v"
+    - Type hints zorunlu (tum fonksiyon parametreleri ve donus tipleri)
+    - async/await tercih et (tum I/O-bound islemler async olmali)
+    - Pydantic model kullan (raw dict degil), request/response ayri model
+    - httpx.AsyncClient kullan (requests degil), connection pooling icin client reuse
+    - Router'lari routes/ altinda topla, her router tek bir kaynak (resource) icin
+    - Business logic services/ altinda, route handler'larda is mantigi YAZMA
+    - Repository pattern: veritabani islemleri repositories/ altinda izole et
+    - Dependency injection kullan (Depends), global state kullanma
+    - Response model her endpoint'te tanimli olsun (response_model=...)
+    - Status code'lari dogru kullan: 201 create, 204 delete, 404 not found, 422 validation
+  architecture: |
+    ```
+    src/
+    ├── main.py              # FastAPI app, middleware, startup/shutdown
+    ├── config.py             # pydantic Settings (.env okur)
+    ├── dependencies.py       # Paylasilabilen Depends fonksiyonlari
+    ├── routes/
+    │   ├── __init__.py       # router include
+    │   └── <resource>.py     # Her kaynak icin ayri router
+    ├── services/
+    │   └── <resource>.py     # Is mantigi
+    ├── repositories/
+    │   └── <resource>.py     # Veritabani islemleri
+    ├── models/
+    │   ├── database.py       # SQLAlchemy/SQLModel tablo modelleri
+    │   └── schemas.py        # Pydantic request/response schemalar
+    └── exceptions.py         # Custom exception'lar + handler'lar
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme
+    - main/master branch'e direkt commit YAPMA
+    - Test olmadan yeni endpoint ekleme
+    - SQL query'lerini string concatenation ile olusturma (SQL injection riski)
+    - Senkron I/O (requests, open() uzun dosya) async context icinde kullanma
+    - Secret/password'leri response'a dahil etme
+    - N+1 query problemi olusturacak sekilde ORM kullanma
+  error_handling: |
+    - Custom exception class'lari `exceptions.py` dosyasinda tanimla
+    - Her endpoint'te olasi hatalari handle et (404, 409, 422, 500)
+    - Exception handler'lari `main.py`'de register et
+    - Kullaniciya donulen hata mesajlari Turkce ve anlasilir olsun
+    - Internal hatalari logla ama kullaniciya stack trace gosterme
+    - Validation hatalarinda hangi alan hatali acikca belirt
+    - Ornek:
+      ```python
+      @app.exception_handler(NotFoundError)
+      async def not_found_handler(request, exc):
+          return JSONResponse(status_code=404, content={"detail": str(exc)})
+      ```
+  test_command: "pytest tests/ -v --tb=short"
   lint_command: "ruff check --fix && ruff format"
 
 hooks:
@@ -33,14 +84,93 @@ rules:
       ---
       description: I/O islemlerinde async kullan
       ---
-      I/O islemlerinde her zaman async/await kullan.
-      requests yerine httpx.AsyncClient, time.sleep yerine asyncio.sleep.
+      ## Async I/O Kurallari
+      - I/O islemlerinde HER ZAMAN async/await kullan
+      - `requests` yerine `httpx.AsyncClient` kullan
+      - `time.sleep()` yerine `asyncio.sleep()` kullan
+      - Dosya I/O icin `aiofiles` kullan (buyuk dosyalarda)
+      - Birden fazla bagimsiz I/O islemini `asyncio.gather()` ile paralel yap
+      - Senkron kutuphaneleri async icinde kullanman gerekirse `run_in_executor()` kullan
+      - Database islemleri icin async driver kullan (asyncpg, aiosqlite)
+
+      ### Ornek
+      ```python
+      # YANLIS
+      response = requests.get(url)
+
+      # DOGRU
+      async with httpx.AsyncClient() as client:
+          response = await client.get(url)
+      ```
+
   - name: pydantic-models.md
     content: |
       ---
       description: API modelleri icin pydantic kullan
       ---
-      API request/response icin Pydantic model kullan. Raw dict donme.
+      ## Pydantic Model Kurallari
+      - API request/response icin HER ZAMAN Pydantic model kullan, raw dict dondurme
+      - Request ve Response icin AYRI model tanimla (ayni modeli paylasma)
+      - Create/Update icin ayri schema kullan (TaskCreate vs TaskUpdate)
+      - Optional alanlar icin `field: str | None = None` syntax kullan
+      - Validation icin `@field_validator` kullan, custom hata mesajlari Turkce olsun
+      - Nested model'lerde circular import'a dikkat et
+
+      ### Ornek
+      ```python
+      class TaskCreate(BaseModel):
+          title: str = Field(..., min_length=1, max_length=200)
+          description: str | None = None
+
+      class TaskResponse(BaseModel):
+          id: int
+          title: str
+          status: str
+          created_at: datetime
+          model_config = ConfigDict(from_attributes=True)
+      ```
+
+  - name: error-handling.md
+    content: |
+      ---
+      description: FastAPI hata yonetimi kurallari
+      ---
+      ## Hata Yonetimi
+      - Her endpoint'te olasi hatalari handle et (404, 409, 422, 500)
+      - Custom exception class'lari `exceptions.py` dosyasinda tanimla
+      - Exception handler'lari `main.py`'de register et
+      - Kullaniciya donulen hata mesajlari Turkce ve anlasilir olsun
+      - Internal hatalari logla ama kullaniciya detay gosterme (guvenlik)
+      - Validation hatalarinda hangi alan hatali acikca belirt
+
+      ### Ornek
+      ```python
+      class NotFoundError(Exception):
+          def __init__(self, resource: str, id: int):
+              self.resource = resource
+              self.id = id
+
+      @app.exception_handler(NotFoundError)
+      async def not_found_handler(request, exc):
+          return JSONResponse(
+              status_code=404,
+              content={"detail": f"{exc.resource} bulunamadi: {exc.id}"}
+          )
+      ```
+
+  - name: database-rules.md
+    content: |
+      ---
+      description: Veritabani islem kurallari
+      ---
+      ## Veritabani Kurallari
+      - Her schema degisikligi icin alembic migration olustur
+      - Migration dosyalarini ASLA elle duzenleme (down revision bozulur)
+      - SELECT sorgularinda sadece gereken kolonlari sec (SELECT * yasak)
+      - Bulk islemlerde N+1 query'den kacin, joinedload/selectinload kullan
+      - Transaction boundary'lerini service katmaninda yonet
+      - Index'leri sik sorgulanan kolonlara ekle
+      - Soft delete tercih et (is_deleted flag), hard delete sadece gerektiginde
 
 skills_include:
   - tdd-workflow
@@ -51,6 +181,8 @@ skills_include:
   - python-testing
   - postgres-patterns
   - docker-patterns
+  - backend-patterns
+  - database-migrations
 
 skills_exclude:
   - "threejs-*"
@@ -60,13 +192,37 @@ skills_exclude:
   - "perl-*"
   - "springboot-*"
   - "jpa-*"
+  - "compose-*"
 
 memory_templates:
   - name: architecture.md
     content: |
       # Mimari Kararlar
-      _(Buraya ekle)_
+
+      ## Katman Yapisi
+      Route -> Service -> Repository -> Database
+      Her katman sadece bir alt katmani cagirir, katman atlama YASAK.
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
   - name: api-contracts.md
     content: |
       # API Sozlesmeleri
-      _(Buraya ekle)_
+
+      ## Endpoint Listesi
+      _(Her yeni endpoint eklendikce buraya yazilir)_
+
+      ## Response Formati
+      Basarili: `{"data": ...}` veya direkt model
+      Hata: `{"detail": "Turkce hata mesaji"}`
+
+  - name: database-schema.md
+    content: |
+      # Veritabani Semasi
+
+      ## Tablolar
+      _(Her migration sonrasi guncelle)_
+
+      ## Iliskiler
+      _(Foreign key'ler ve iliskiler)_

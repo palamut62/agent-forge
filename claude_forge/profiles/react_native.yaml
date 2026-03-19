@@ -1,0 +1,276 @@
+version: 1
+name: react_native
+description: "React Native / Expo, TypeScript mobil uygulama projesi"
+extends: base
+languages: [typescript, javascript]
+frameworks: [react-native, expo]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir React Native mobil gelistiricisisin.
+    Temiz, performansli, cross-platform TypeScript kodu yazarsin.
+    Her degisiklikte performans, kullanici deneyimi ve platform uyumlulugu onceligindir.
+  project_overview: |
+    Bu bir React Native / Expo tabanli cross-platform mobil uygulamadir.
+    TypeScript ile yazilir, iOS ve Android platformlarini destekler.
+    React Navigation ile gezinme, async storage veya MMKV ile yerel depolama kullanilir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "React Native 0.73+, Expo SDK 50+, TypeScript 5, React Navigation 6, Zustand/Redux Toolkit, React Query"
+  coding_standards: |
+    - TypeScript strict mode zorunlu, `any` tipi YASAK
+    - FlatList kullan, ScrollView icinde map ile liste render ETME (performans)
+    - React.memo() ile gereksiz re-render'lari onle, ozellikle liste item'larinda
+    - useCallback ve useMemo'yu dogru kullan, her yere koyma (premature optimization)
+    - StyleSheet.create() kullan, inline style YAZMA (performans)
+    - Platform-specific kod icin Platform.select() veya `.ios.tsx`/`.android.tsx` dosyalari kullan
+    - Animasyonlar icin react-native-reanimated kullan (JS thread'i bloklama)
+    - Gorseller icin expo-image veya FastImage kullan, Image component'i buyuk listeler icin yavas
+    - Navigation type'larini RootStackParamList ile tanimla
+    - Component'leri kucuk tut, 200 satirdan fazla ise parcala
+    - Async islemlerde AbortController ile cleanup yap
+    - Accessibility: accessibilityLabel ve accessibilityRole her interaktif elemanda olmali
+  architecture: |
+    ```
+    src/
+    ├── app/                     # Expo Router (veya entry point)
+    │   ├── _layout.tsx          # Root layout
+    │   ├── index.tsx            # Ana ekran
+    │   └── (tabs)/              # Tab navigasyonu
+    ├── screens/
+    │   ├── HomeScreen.tsx       # Ekran component'leri
+    │   ├── ProfileScreen.tsx
+    │   └── auth/
+    │       ├── LoginScreen.tsx
+    │       └── RegisterScreen.tsx
+    ├── components/
+    │   ├── ui/                  # Button, Input, Card
+    │   ├── lists/               # Liste item component'leri
+    │   └── layout/              # Header, TabBar
+    ├── navigation/
+    │   ├── types.ts             # Navigation param tipleri
+    │   └── linking.ts           # Deep linking config
+    ├── services/
+    │   ├── api.ts               # API client
+    │   └── storage.ts           # AsyncStorage/MMKV wrapper
+    ├── hooks/
+    │   ├── useAuth.ts           # Auth hook
+    │   └── useApi.ts            # API hook
+    ├── store/
+    │   └── authStore.ts         # Zustand store
+    ├── types/
+    │   └── index.ts             # Global type'lar
+    ├── constants/
+    │   ├── colors.ts            # Renk paleti
+    │   └── layout.ts            # Layout sabitleri
+    └── utils/
+        └── helpers.ts           # Yardimci fonksiyonlar
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme
+    - `any` tipi ASLA kullanma
+    - ScrollView icinde map ile liste render ETME, FlatList kullan
+    - Inline style YAZMA, StyleSheet.create() kullan
+    - JS thread'inde agir hesaplama YAPMA (animasyon, buyuk veri isleme)
+    - console.log'lari uretim kodunda BIRAKMA
+    - Native modulleri Expo SDK'da karsiligi varken KULLANMA
+  error_handling: |
+    - Global error boundary ile yakalanmayan hatalari handle et
+    - API isteklerinde try-catch ile hata yakala, kullaniciya Toast/Alert ile bildir
+    - Network hatalarinda retry mekanizmasi kur (React Query otomatik yapar)
+    - Offline durumu handle et, NetInfo ile baglanti kontrol et
+    - Crash reporting icin Sentry veya Crashlytics entegre et
+    - Ornek:
+      ```typescript
+      // components/ErrorBoundary.tsx
+      import { ErrorBoundary } from "react-error-boundary";
+
+      function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
+        return (
+          <View style={styles.container}>
+            <Text style={styles.title}>Bir hata olustu</Text>
+            <Text style={styles.message}>{error.message}</Text>
+            <TouchableOpacity onPress={resetErrorBoundary} style={styles.button}>
+              <Text style={styles.buttonText}>Tekrar Dene</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      }
+
+      // hooks/useApi.ts
+      export function useApi<T>(queryKey: string[], fetcher: () => Promise<T>) {
+        return useQuery({
+          queryKey,
+          queryFn: fetcher,
+          retry: 2,
+          onError: (error: Error) => {
+            Alert.alert("Hata", error.message || "Baglanti hatasi olustu");
+          },
+        });
+      }
+      ```
+  test_command: "npx jest --coverage --passWithNoTests"
+  lint_command: "npx eslint --fix src/ && npx prettier --write src/"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.ts ]] || [[ "$FILE_PATH" == *.tsx ]]; then
+        npx prettier --write "$FILE_PATH" 2>/dev/null
+        npx eslint --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: performance.md
+    content: |
+      ---
+      description: React Native performans kurallari
+      ---
+      ## Performans Kurallari
+      - FlatList kullan, ScrollView icinde map ile liste render ETME
+      - FlatList'te `keyExtractor`, `getItemLayout`, `maxToRenderPerBatch` belirt
+      - React.memo() ile liste item component'lerini sar
+      - Buyuk listeler icin `windowSize` ve `initialNumToRender` ayarla
+      - Agir hesaplamalari `InteractionManager.runAfterInteractions` ile ertele
+      - Animasyonlar icin Reanimated `useSharedValue` ve `useAnimatedStyle` kullan
+
+      ### Ornek
+      ```tsx
+      // YANLIS - her item re-render olur
+      <ScrollView>
+        {items.map(item => <ItemCard key={item.id} item={item} />)}
+      </ScrollView>
+
+      // DOGRU - sanal liste, memo ile optimize
+      const MemoizedItem = React.memo(({ item }: { item: Item }) => (
+        <ItemCard item={item} />
+      ));
+
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <MemoizedItem item={item} />}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        getItemLayout={(_, index) => ({
+          length: ITEM_HEIGHT,
+          offset: ITEM_HEIGHT * index,
+          index,
+        })}
+      />
+      ```
+
+  - name: native-modules.md
+    content: |
+      ---
+      description: Native modul kullanim kurallari
+      ---
+      ## Native Modul Kurallari
+      - Expo SDK'da karsiligi varsa ONCELIKLE onu kullan
+      - Expo modulleri: expo-camera, expo-location, expo-notifications, expo-image
+      - Custom native modul gerekiyorsa Expo Modules API veya Turbo Modules kullan
+      - Platform-specific kod icin Platform.select() veya dosya uzantisi kullan
+      - Native modul'un her iki platformda calistigini test et
+
+      ### Ornek
+      ```typescript
+      import { Platform } from "react-native";
+
+      const styles = StyleSheet.create({
+        shadow: Platform.select({
+          ios: {
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 4,
+          },
+          android: {
+            elevation: 4,
+          },
+        }),
+      });
+      ```
+
+  - name: navigation-patterns.md
+    content: |
+      ---
+      description: React Navigation kullanim kaliplari
+      ---
+      ## Navigation Kurallari
+      - RootStackParamList ile tum route parametrelerini type-safe tanimla
+      - Her navigator icin ayri param list olustur
+      - useNavigation hook'unu typed kullan: `useNavigation<NavigationProp<RootStackParamList>>()`
+      - Deep linking config'ini her route icin tanimla
+      - Auth flow icin ayri navigator kullan (AuthStack vs AppStack)
+
+      ### Ornek
+      ```typescript
+      // navigation/types.ts
+      export type RootStackParamList = {
+        Home: undefined;
+        Profile: { userId: string };
+        Settings: undefined;
+      };
+
+      export type AuthStackParamList = {
+        Login: undefined;
+        Register: { referralCode?: string };
+      };
+
+      // Kullanim
+      const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+      navigation.navigate("Profile", { userId: "123" });
+      ```
+
+skills_include:
+  - frontend-patterns
+  - tdd-workflow
+  - typescript-patterns
+  - mobile-patterns
+  - react-native-patterns
+  - expo-patterns
+
+skills_exclude:
+  - "python-*"
+  - "golang-*"
+  - "rust-*"
+  - "springboot-*"
+  - "django-*"
+  - "nextjs-*"
+  - "vue-*"
+  - "flutter-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Navigation Yapisi
+      Stack, Tab, Drawer navigator hiyerarsisi.
+
+      ## State Yonetimi
+      Zustand/Redux store yapisi ve veri akisi.
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: screens.md
+    content: |
+      # Ekran Listesi
+
+      ## Ekranlar
+      _(Her ekran ve navigasyon parametreleri)_
+
+      ## Deep Links
+      _(Deep link URL'leri ve eslestikleri ekranlar)_
+
+  - name: native-modules.md
+    content: |
+      # Native Modul Envanteri
+
+      ## Expo Modulleri
+      _(Kullanilan Expo SDK modulleri)_
+
+      ## Custom Native Moduller
+      _(Proje ozelinde yazilan native moduller)_

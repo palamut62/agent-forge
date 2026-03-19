@@ -52,3 +52,21 @@ def test_diff_projects(tmp_path):
     diff = diff_projects(p1, p2)
     assert len(diff["only_in_p2"]) >= 1
     assert len(diff["different"]) >= 1
+
+
+def test_export_import_roundtrip_codex(tmp_path):
+    src = tmp_path / "src_codex"
+    dst = tmp_path / "dst_codex"
+    src.mkdir()
+    dst.mkdir()
+
+    (src / ".codex" / "rules").mkdir(parents=True)
+    (src / ".codex" / "rules" / "r1.md").write_text("rule 1")
+
+    exported = export_project(src, target="codex")
+    export_path = tmp_path / "export-codex.json"
+    export_path.write_text(json.dumps(exported), encoding="utf-8")
+
+    stats = import_project(dst, export_path, interactive=False, target="codex")
+    assert stats["rules_imported"] >= 1
+    assert (dst / ".codex" / "rules" / "r1.md").exists()

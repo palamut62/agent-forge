@@ -1,0 +1,270 @@
+version: 1
+name: electron
+description: "Electron + React/Vue + TypeScript masaustu uygulama"
+extends: base
+languages: [typescript, javascript]
+frameworks: [electron, react]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir Electron masaustu uygulama gelistiricisisin.
+    Temiz, guvenli, performansli TypeScript kodu yazarsin.
+    Her degisiklikte guvenlik (contextIsolation, sandbox), process separation ve UX onceligindir.
+  project_overview: |
+    Bu bir Electron tabanli cross-platform masaustu uygulamasidir.
+    Main process (Node.js) ve renderer process (browser) ayrimina dikkat edilir.
+    TypeScript ile yazilir, React veya Vue ile UI olusturulur.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Electron 29+, TypeScript 5, React 18 (veya Vue 3), Vite, electron-builder, electron-store"
+  coding_standards: |
+    - TypeScript strict mode zorunlu, `any` tipi YASAK
+    - Main ve renderer process kodlarini KESINLIKLE ayir
+    - contextIsolation HER ZAMAN `true` olmali (guvenlik)
+    - sandbox HER ZAMAN `true` olmali (guvenlik)
+    - nodeIntegration HER ZAMAN `false` olmali (guvenlik)
+    - IPC iletisimi sadece preload script uzerinden (contextBridge.exposeInMainWorld)
+    - IPC channel isimleri aciklayici ve namespace'li: `app:getVersion`, `file:save`
+    - Main process'te agir islemleri worker thread'e tasi
+    - Renderer'da Node.js API'lerini KULLANMA, IPC ile main'e sor
+    - Auto-update icin electron-updater kullan
+    - Dosya isimleri kebab-case: `main-window.ts`, `file-handler.ts`
+    - Environment variable'lari `.env`'den oku, hardcode YAPMA
+    - Menu ve tray islemlerini ayri modullerde yonet
+  architecture: |
+    ```
+    src/
+    ├── main/
+    │   ├── index.ts              # Main process entry point
+    │   ├── window.ts             # BrowserWindow yonetimi
+    │   ├── menu.ts               # Application menu
+    │   ├── tray.ts               # System tray
+    │   ├── ipc/
+    │   │   ├── handlers.ts       # IPC handler registration
+    │   │   ├── file-handlers.ts  # Dosya islem handler'lari
+    │   │   └── app-handlers.ts   # Uygulama handler'lari
+    │   └── services/
+    │       ├── file-service.ts   # Dosya islemleri
+    │       ├── store-service.ts  # Persistent storage
+    │       └── updater.ts        # Auto-update
+    ├── preload/
+    │   └── index.ts              # contextBridge ile API expose
+    ├── renderer/
+    │   ├── index.html            # HTML entry
+    │   ├── main.tsx              # React/Vue entry
+    │   ├── App.tsx               # Root component
+    │   ├── components/           # UI component'leri
+    │   ├── hooks/                # Custom hooks
+    │   └── pages/                # Sayfa component'leri
+    └── shared/
+        ├── types.ts              # Main/renderer paylasilan tipler
+        └── constants.ts          # Paylasilan sabitler
+    ```
+  hard_boundaries: |
+    - nodeIntegration'i ASLA `true` yapma (XSS saldirisi riski)
+    - contextIsolation'i ASLA `false` yapma
+    - Renderer process'te `require()` veya Node.js API KULLANMA
+    - `webPreferences.webSecurity`'yi ASLA `false` yapma
+    - Remote modulu KULLANMA (deprecated ve guvenlik riski)
+    - Shell.openExternal ile kullanici girdisini direkt ACMA (URL validation yap)
+    - .env ve signing key dosyalarini COMMIT etme
+  error_handling: |
+    - Main process'te global `uncaughtException` ve `unhandledRejection` handler tanimla
+    - IPC handler'larda try-catch ile hata yakala, renderer'a yapisal hata don
+    - Renderer'da global error boundary kullan
+    - Crash reporter'i aktif et (crashReporter.start)
+    - Dosya islemlerinde ENOENT, EACCES gibi spesifik hatalari handle et
+    - Ornek:
+      ```typescript
+      // main/ipc/handlers.ts
+      import { ipcMain, type IpcMainInvokeEvent } from "electron";
+
+      interface IpcResult<T> {
+        success: boolean;
+        data?: T;
+        error?: string;
+      }
+
+      function handleIpc<T>(
+        channel: string,
+        handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<T>,
+      ) {
+        ipcMain.handle(channel, async (event, ...args) => {
+          try {
+            const data = await handler(event, ...args);
+            return { success: true, data } satisfies IpcResult<T>;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Bilinmeyen hata";
+            return { success: false, error: message } satisfies IpcResult<never>;
+          }
+        });
+      }
+
+      // Kullanim
+      handleIpc("file:read", async (_event, filePath: string) => {
+        return await fs.readFile(filePath, "utf-8");
+      });
+      ```
+  test_command: "npx vitest run && npx playwright test"
+  lint_command: "npx eslint --fix src/ && npx prettier --write src/"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.ts ]] || [[ "$FILE_PATH" == *.tsx ]]; then
+        npx prettier --write "$FILE_PATH" 2>/dev/null
+        npx eslint --fix "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: ipc-patterns.md
+    content: |
+      ---
+      description: Electron IPC iletisim kurallari
+      ---
+      ## IPC Patterns
+      - Renderer -> Main: `ipcRenderer.invoke()` (async, response bekler)
+      - Main -> Renderer: `webContents.send()` (one-way notification)
+      - ASLA `ipcRenderer.sendSync` kullanma (UI thread'i bloklar)
+      - Channel isimleri namespace'li: `file:save`, `app:quit`, `window:minimize`
+      - Preload script ile contextBridge uzerinden API expose et
+
+      ### Ornek
+      ```typescript
+      // preload/index.ts
+      import { contextBridge, ipcRenderer } from "electron";
+
+      contextBridge.exposeInMainWorld("electronAPI", {
+        saveFile: (content: string) => ipcRenderer.invoke("file:save", content),
+        onUpdateAvailable: (callback: () => void) =>
+          ipcRenderer.on("app:update-available", callback),
+      });
+
+      // renderer'da kullanim (type-safe)
+      declare global {
+        interface Window {
+          electronAPI: {
+            saveFile: (content: string) => Promise<IpcResult<string>>;
+            onUpdateAvailable: (callback: () => void) => void;
+          };
+        }
+      }
+
+      const result = await window.electronAPI.saveFile("icerik");
+      ```
+
+  - name: security.md
+    content: |
+      ---
+      description: Electron guvenlik kurallari
+      ---
+      ## Guvenlik Kurallari
+      - contextIsolation: true (ZORUNLU)
+      - nodeIntegration: false (ZORUNLU)
+      - sandbox: true (ZORUNLU)
+      - webSecurity: true (ZORUNLU)
+      - Content Security Policy (CSP) header tanimla
+      - Shell.openExternal icin URL whitelist kontrolu yap
+      - Remote content yukleme: sadece HTTPS, bilinen domain'ler
+
+      ### Ornek
+      ```typescript
+      // main/window.ts
+      const mainWindow = new BrowserWindow({
+        webPreferences: {
+          preload: path.join(__dirname, "../preload/index.js"),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          webSecurity: true,
+        },
+      });
+
+      // CSP header
+      mainWindow.webContents.session.webRequest.onHeadersReceived(
+        (details, callback) => {
+          callback({
+            responseHeaders: {
+              ...details.responseHeaders,
+              "Content-Security-Policy": [
+                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+              ],
+            },
+          });
+        },
+      );
+      ```
+
+  - name: process-separation.md
+    content: |
+      ---
+      description: Main ve renderer process ayrim kurallari
+      ---
+      ## Process Separation
+      - Main process: Node.js API, dosya sistemi, native menu, tray, auto-update
+      - Renderer process: UI, DOM, React/Vue component'leri
+      - Preload: contextBridge ile guvenli kopru
+      - ASLA renderer'da dosya sistemi erisimi YAPMA
+      - ASLA main'de DOM manipulasyonu YAPMA
+
+      ### Ornek
+      ```typescript
+      // YANLIS - renderer'da Node.js kullanimi
+      import fs from "fs"; // Bu calismaz ve guvenlik riski
+
+      // DOGRU - IPC ile main'e sor
+      const fileContent = await window.electronAPI.readFile(path);
+      ```
+
+skills_include:
+  - frontend-patterns
+  - tdd-workflow
+  - typescript-patterns
+  - electron-patterns
+  - security-review
+  - desktop-patterns
+
+skills_exclude:
+  - "python-*"
+  - "golang-*"
+  - "rust-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "flutter-*"
+  - "django-*"
+  - "springboot-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Process Yapisi
+      Main Process <-> IPC (preload) <-> Renderer Process
+
+      ## IPC Channel'lari
+      _(Tanimli IPC channel'lari ve handler'lari)_
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: windows.md
+    content: |
+      # Pencere Yonetimi
+
+      ## Pencereler
+      _(BrowserWindow tanimlari ve ozellikleri)_
+
+      ## Menu ve Tray
+      _(Application menu ve system tray yapisi)_
+
+  - name: security-config.md
+    content: |
+      # Guvenlik Yapilandirmasi
+
+      ## CSP Politikasi
+      _(Content Security Policy kurallari)_
+
+      ## Izin Verilen URL'ler
+      _(Shell.openExternal whitelist)_

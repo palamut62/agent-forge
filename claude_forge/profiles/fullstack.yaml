@@ -6,22 +6,220 @@ languages: [python, node]
 frameworks: [fastapi, react]
 
 claude_md:
-  tech_stack: "FastAPI + React + TypeScript + PostgreSQL"
+  role: |
+    Sen bu projede calisan kidemli bir fullstack gelistiricisisin.
+    Backend'de temiz async Python, frontend'de tip-guvenli React kodu yazarsin.
+    API contract'larina sadik kalisin, backend ve frontend arasinda tutarlilik onceligindir.
+  project_overview: |
+    Bu bir fullstack monorepo projesidir: FastAPI backend + React frontend.
+    Backend ve frontend arasinda OpenAPI schema ile API contract saglanir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Backend: Python 3.12, FastAPI, SQLAlchemy, alembic, httpx, pydantic | Frontend: React 19+, TypeScript 5+, Vite, TanStack Query, Tailwind CSS | DB: PostgreSQL | Infra: Docker, docker-compose"
   coding_standards: |
-    - Backend: Python type hints, async/await
-    - Frontend: TypeScript strict, no any
-    - API: OpenAPI schema driven
-  test_command: "pytest tests/ -v && cd frontend && npm test"
-  lint_command: "ruff check --fix && cd frontend && npx eslint --fix ."
+    - Backend: Python type hints zorunlu, async/await tum I/O islemlerinde
+    - Backend: Pydantic model kullan, raw dict dondurme
+    - Backend: Business logic services/ altinda, route handler'da is mantigi YAZMA
+    - Frontend: TypeScript strict mode, `any` YASAK
+    - Frontend: Functional component only, custom hook'lar hooks/ altinda
+    - Frontend: API tipler backend OpenAPI schema'dan generate et (openapi-typescript)
+    - API: RESTful convention, versiyonlama (/api/v1/...), tutarli response formati
+    - Her iki tarafta da import sirasi: stdlib/react -> third-party -> local
+    - Git: backend ve frontend degisiklikleri ayri commit'lerde (mumkunse)
+  architecture: |
+    ```
+    project-root/
+    ├── backend/
+    │   ├── src/
+    │   │   └── app/
+    │   │       ├── main.py              # FastAPI app, CORS, startup
+    │   │       ├── config.py             # pydantic Settings
+    │   │       ├── dependencies.py       # Shared Depends
+    │   │       ├── routes/
+    │   │       │   └── <resource>.py
+    │   │       ├── services/
+    │   │       │   └── <resource>.py
+    │   │       ├── repositories/
+    │   │       │   └── <resource>.py
+    │   │       ├── models/
+    │   │       │   ├── database.py       # SQLAlchemy modelleri
+    │   │       │   └── schemas.py        # Pydantic request/response
+    │   │       └── exceptions.py
+    │   ├── tests/
+    │   ├── alembic/
+    │   └── pyproject.toml
+    ├── frontend/
+    │   ├── src/
+    │   │   ├── components/
+    │   │   │   ├── ui/                  # Genel UI
+    │   │   │   └── features/            # Feature-specific
+    │   │   ├── hooks/
+    │   │   ├── services/                # API cagrilari (generated types)
+    │   │   ├── stores/
+    │   │   ├── types/                   # OpenAPI'den generate edilen tipler
+    │   │   └── utils/
+    │   ├── package.json
+    │   └── tsconfig.json
+    ├── docker-compose.yml
+    ├── Makefile                          # Ortak komutlar
+    └── openapi.json                     # Generate edilen API schema
+    ```
+  hard_boundaries: |
+    - .env dosyalarini ASLA duzenleme
+    - API contract'i bozan breaking change YAPMA (oncesinde frontend'i guncelle)
+    - Backend'de senkron I/O kullanma (requests, time.sleep)
+    - Frontend'de `any` tipi kullanma
+    - SQL query'lerini string concatenation ile olusturma
+    - CORS'u `allow_origins=["*"]` ile acma (spesifik origin belirt)
+    - Secret'lari frontend koduna koyma
+    - Backend ve frontend'i ayni Docker image'da birlestirme
+  error_handling: |
+    - Backend: Custom exception'lar `exceptions.py`'de, handler'lar `main.py`'de
+    - Backend: Kullaniciya donen hatalar Turkce, internal hatalar loglanir
+    - Frontend: API hatalarini TanStack Query onError ile handle et
+    - Frontend: Error Boundary ile beklenmeyen hatalari yakala
+    - API hata formati tutarli olsun: `{"detail": "Turkce mesaj", "code": "ERROR_CODE"}`
+    - Validation hatalari 422, not found 404, conflict 409, server error 500
+    - Ornek:
+      ```python
+      # Backend - exceptions.py
+      class AppError(Exception):
+          def __init__(self, detail: str, code: str, status: int = 400):
+              self.detail = detail
+              self.code = code
+              self.status = status
+
+      @app.exception_handler(AppError)
+      async def app_error_handler(request, exc: AppError):
+          return JSONResponse(
+              status_code=exc.status,
+              content={"detail": exc.detail, "code": exc.code}
+          )
+      ```
+      ```tsx
+      // Frontend - error handling
+      const { data, error } = useQuery({
+        queryKey: ["users"],
+        queryFn: fetchUsers,
+      });
+      if (error) return <ErrorMessage message="Kullanicilar yuklenemedi" />;
+      ```
+  test_command: "cd backend && pytest tests/ -v --tb=short && cd ../frontend && npx vitest run"
+  lint_command: "cd backend && ruff check --fix && ruff format && cd ../frontend && npx eslint --fix . && npx prettier --write ."
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.py ]]; then
+        ruff format "$FILE_PATH" 2>/dev/null
+        ruff check --fix "$FILE_PATH" 2>/dev/null
+      fi
+      if [[ "$FILE_PATH" == *.ts || "$FILE_PATH" == *.tsx ]]; then
+        npx eslint --fix "$FILE_PATH" 2>/dev/null
+        npx prettier --write "$FILE_PATH" 2>/dev/null
+      fi
+
+rules:
+  - name: api-contract.md
+    content: |
+      ---
+      description: Backend-Frontend API sozlesmesi kurallari
+      ---
+      ## API Contract Kurallari
+      - Her endpoint icin OpenAPI schema otomatik uretilmeli (FastAPI bunu yapar)
+      - Frontend tipleri `openapi.json`'dan generate et (`openapi-typescript`)
+      - API degisikligi yapildiginda frontend tiplerini yeniden generate et
+      - Breaking change yapma: yeni alan ekle, eski alani kaldirma (deprecate et)
+      - Versiyonlama kullan: `/api/v1/...`, major degisiklikte `/api/v2/...`
+      - Response formati tutarli olsun: basarili `{"data": ...}`, hata `{"detail": ..., "code": ...}`
+
+      ### Ornek
+      ```python
+      # Backend: endpoint tanimlama
+      @router.get("/api/v1/users/{user_id}", response_model=UserResponse)
+      async def get_user(user_id: int, service: UserService = Depends(get_user_service)):
+          user = await service.get_by_id(user_id)
+          if not user:
+              raise NotFoundError("Kullanici", user_id)
+          return user
+      ```
+      ```bash
+      # Frontend: tip generate etme
+      npx openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts
+      ```
+      ```tsx
+      // Frontend: generated tipleri kullanma
+      import type { paths } from "@/types/api";
+
+      type User = paths["/api/v1/users/{user_id}"]["get"]["responses"]["200"]["content"]["application/json"];
+      ```
+
+  - name: cross-cutting.md
+    content: |
+      ---
+      description: Backend-Frontend ortaklasa konular
+      ---
+      ## Cross-Cutting Concerns
+      - Auth: JWT token backend'de uret, frontend'de httpOnly cookie veya Authorization header ile gonder
+      - CORS: Backend'de sadece frontend origin'ine izin ver, wildcard YASAK
+      - Logging: Backend'de loguru, frontend'de console.error (production'da Sentry)
+      - Environment: Backend `.env`, frontend `.env.local` (VITE_ prefix)
+      - Docker: Backend ve frontend ayri container, docker-compose ile birlestir
+      - CI/CD: Backend testleri + frontend testleri + lint ayri step'lerde
+
+      ### Ornek: CORS
+      ```python
+      # Backend - main.py
+      app.add_middleware(
+          CORSMiddleware,
+          allow_origins=["http://localhost:5173"],  # Vite dev server
+          allow_credentials=True,
+          allow_methods=["*"],
+          allow_headers=["*"],
+      )
+      ```
+
+  - name: monorepo-rules.md
+    content: |
+      ---
+      description: Monorepo yonetim kurallari
+      ---
+      ## Monorepo Kurallari
+      - Backend ve frontend ayri klasorde: `backend/`, `frontend/`
+      - Root'ta `Makefile` veya script'ler ile ortak komutlar tanimla
+      - Her iki tarafin bagimliliklari birbirinden bagimsiz (ayri package manager)
+      - Docker build context her servis icin ayri Dockerfile
+      - Shared tipler: OpenAPI schema uzerinden, elle paylasma YASAK
+
+      ### Ornek: Makefile
+      ```makefile
+      .PHONY: dev test lint
+
+      dev:
+      	@echo "Backend ve Frontend baslatiliyor..."
+      	cd backend && uvicorn src.app.main:app --reload &
+      	cd frontend && npm run dev
+
+      test:
+      	cd backend && pytest tests/ -v
+      	cd frontend && npx vitest run
+
+      lint:
+      	cd backend && ruff check --fix && ruff format
+      	cd frontend && npx eslint --fix . && npx prettier --write .
+      ```
 
 skills_include:
   - tdd-workflow
   - security-review
   - api-design
   - python-review
+  - python-patterns
   - frontend-patterns
   - postgres-patterns
   - docker-patterns
+  - backend-patterns
 
 skills_exclude:
   - "threejs-*"
@@ -30,3 +228,51 @@ skills_exclude:
   - "golang-*"
   - "perl-*"
   - "springboot-*"
+  - "jpa-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Fullstack Mimari Kararlar
+
+      ## Backend Katman Yapisi
+      Route -> Service -> Repository -> Database
+
+      ## Frontend Katman Yapisi
+      Page -> Feature Component -> UI Component
+      API Layer: TanStack Query -> services/ -> Backend
+
+      ## API Contract
+      - Base URL: /api/v1
+      - Auth: JWT (httpOnly cookie)
+      - Response: {"data": ...} veya {"detail": ..., "code": ...}
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: api-contracts.md
+    content: |
+      # API Sozlesmeleri
+
+      ## Endpoint Listesi
+      | Method | Path | Request | Response | Aciklama |
+      |--------|------|---------|----------|----------|
+      _(Her yeni endpoint eklendikce buraya yazilir)_
+
+      ## Ortak Response Formati
+      Basarili: `{"data": ...}` veya direkt model
+      Hata: `{"detail": "Turkce mesaj", "code": "ERROR_CODE"}`
+      Validation: 422, `{"detail": [{"field": "...", "msg": "..."}]}`
+
+  - name: shared-decisions.md
+    content: |
+      # Paylasilan Kararlar
+
+      ## Auth Mekanizmasi
+      _(JWT, session, OAuth - projeye gore belirlenir)_
+
+      ## Deployment
+      _(Docker, K8s, VPS - projeye gore belirlenir)_
+
+      ## Third-Party Servisler
+      _(Kullanilan dis servisler ve entegrasyonlar)_

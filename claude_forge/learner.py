@@ -6,16 +6,21 @@ from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
+from .targets import get_target_platform
+from .config import CONFIG_DIR, LEGACY_CONFIG_DIR
 
 console = Console()
 
-LESSONS_FILE = Path.home() / ".claude-forge" / "lessons.json"
+LESSONS_FILE = CONFIG_DIR / "lessons.json"
+LEGACY_LESSONS_FILE = LEGACY_CONFIG_DIR / "lessons.json"
 
 
 def load_lessons() -> list[dict]:
     """Load learned lessons."""
     if LESSONS_FILE.exists():
         return json.loads(LESSONS_FILE.read_text(encoding="utf-8"))
+    if LEGACY_LESSONS_FILE.exists():
+        return json.loads(LEGACY_LESSONS_FILE.read_text(encoding="utf-8"))
     return []
 
 
@@ -67,7 +72,7 @@ def list_lessons(category: str | None = None) -> None:
         )
 
 
-def apply_lessons_to_project(project_path: str, project_type: str = "") -> int:
+def apply_lessons_to_project(project_path: str, project_type: str = "", target: str = "claude") -> int:
     """Apply learned lessons as rules to a project."""
     lessons = load_lessons()
     if not lessons:
@@ -80,7 +85,8 @@ def apply_lessons_to_project(project_path: str, project_type: str = "") -> int:
         ]
 
     path = Path(project_path)
-    rules_dir = path / ".claude" / "rules"
+    target_platform = get_target_platform(target)
+    rules_dir = path / target_platform.config_dir / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
 
     applied = 0

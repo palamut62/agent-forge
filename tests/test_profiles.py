@@ -142,3 +142,30 @@ def test_extract_empty_project(tmp_path):
     extracted = extract_profile(tmp_path, name="empty")
     assert extracted.name == "empty"
     assert extracted.rules == []
+
+
+def test_apply_profile_creates_codex_structure(tmp_path):
+    import json
+
+    profile = load_profile("fastapi")
+    apply_profile(profile, tmp_path, interactive=False, target="codex")
+
+    assert (tmp_path / "AGENTS.md").exists()
+    assert (tmp_path / ".codex" / "settings.json").exists()
+    assert (tmp_path / ".codex" / "hooks" / "protect-env.sh").exists()
+    assert (tmp_path / ".codex" / "rules" / "async-io.md").exists()
+
+    skill_profile = json.loads(
+        (tmp_path / ".codex" / "skill-profile.json").read_text(encoding="utf-8")
+    )
+    assert skill_profile["profile"] == "fastapi"
+
+
+def test_extract_profile_from_codex_structure(tmp_path):
+    profile = load_profile("fastapi")
+    apply_profile(profile, tmp_path, interactive=False, target="codex")
+
+    extracted = extract_profile(tmp_path, name="my-codex", target="codex")
+    assert extracted.name == "my-codex"
+    assert len(extracted.rules) >= 1
+    assert len(extracted.hooks) >= 1

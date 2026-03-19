@@ -1,0 +1,194 @@
+# Agent Forge
+
+Automated project setup tool for AI coding assistants (Claude Code, Codex, Antigravity).
+
+When you create a new project or want to add an AI assistant to an existing one, Agent Forge automatically generates everything: CLAUDE.md, hooks, rules, memory structure, skill matching, and more.
+
+## Features
+
+### Core
+- **Multi-target**: Claude Code, Codex, and Antigravity support
+- **AI-powered analysis**: Analyzes your project via OpenRouter API and generates a custom setup plan
+- **19 built-in profiles**: Python, JavaScript, Go, Rust, Swift, Kotlin, Flutter, and more
+- **Auto tech stack detection**: pyproject.toml, package.json, go.mod, Cargo.toml, pubspec.yaml...
+
+### Hook System (Maestro-inspired)
+| Hook | Event | What It Does |
+|------|-------|--------------|
+| `protect-env.sh` | PreToolUse | Blocks .env file editing |
+| `brain-sync.sh` | PostToolUse | Automatic memory logging after every tool use |
+| `format.sh` | PostToolUse | Code formatting (ruff/eslint/gofmt...) |
+| `session-start.sh` | SessionStart | Tech stack detection + brain summary |
+| `pre-compact.sh` | PreCompact | Prevents context loss during compaction |
+| `qa-gate.sh` | Stop | Quality checks (tests, TODOs, uncommitted changes) |
+
+### Brain System
+`memory/brain.jsonl` is automatically maintained by hooks:
+- Errors and exceptions
+- File changes (Edit/Write operations)
+- Executed commands
+- Context compaction summaries
+- QA gate warnings
+
+### Advanced Features
+- **Learning System**: Learn from mistakes, auto-apply rules to new projects
+- **Profile System**: Create, apply, and extract profiles
+- **Skill Navigator**: Recommends relevant skills from 190+ available
+- **Codemap Generator**: Creates project structure maps
+- **Cross-project Sync**: Transfer and compare setups between projects
+- **Release Manager**: Version management, quality gates, smart push
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+### Interactive mode
+```bash
+agent-forge-py
+```
+
+### Quick setup
+```bash
+agent-forge-py /path/to/project
+```
+
+### With specific target
+```bash
+agent-forge-py /path/to/project -t codex
+```
+
+### With profile
+```bash
+agent-forge-py /path/to/project -p fastapi
+```
+
+### Specific flow
+```bash
+agent-forge-py --flow settings
+agent-forge-py --flow scan-project
+agent-forge-py --flow release
+```
+
+## Profiles
+
+### Web
+| Profile | Description |
+|---------|-------------|
+| `react` | React + TypeScript + Vite |
+| `nextjs` | Next.js 14+ App Router + Tailwind + Prisma |
+| `vue` | Vue 3 Composition API + Pinia |
+| `express_node` | Node.js + Express/Fastify + TypeScript |
+| `fullstack` | FastAPI backend + React frontend |
+
+### Backend
+| Profile | Description |
+|---------|-------------|
+| `fastapi` | FastAPI + Python async + SQLAlchemy |
+| `django` | Django 5+ DRF + PostgreSQL |
+| `springboot` | Java/Kotlin + Spring Boot 3 + JPA |
+| `golang` | Go 1.22+ + chi/gin/echo |
+| `rust` | Rust + tokio/actix + Cargo |
+
+### Mobile
+| Profile | Description |
+|---------|-------------|
+| `react_native` | React Native / Expo + TypeScript |
+| `flutter` | Flutter/Dart + BLoC/Riverpod |
+| `kotlin_android` | Kotlin + Jetpack Compose + MVVM + Hilt |
+| `swift_ios` | Swift 6 + SwiftUI + async/await |
+
+### Other
+| Profile | Description |
+|---------|-------------|
+| `electron` | Electron + React + TypeScript |
+| `telegram_bot` | Python Telegram bot |
+| `cli_tool` | Python CLI (click/typer + rich) |
+| `data_pipeline` | ETL pipeline (pandas/polars) |
+| `base` | Common rules for all profiles |
+
+## Generated File Structure
+
+```
+project/
+├── CLAUDE.md                    # AI assistant guide (or AGENTS.md / ANTIGRAVITY.md)
+├── .claude/                     # (or .codex/ / .antigravity/)
+│   ├── settings.json            # Hook configuration
+│   ├── hooks/
+│   │   ├── protect-env.sh       # .env protection
+│   │   ├── brain-sync.sh        # Automatic memory
+│   │   ├── format.sh            # Code formatting
+│   │   ├── session-start.sh     # Session startup
+│   │   ├── pre-compact.sh       # Context preservation
+│   │   └── qa-gate.sh           # Quality gate
+│   ├── rules/                   # AI behavior rules
+│   │   ├── no-env-edit.md
+│   │   ├── git-safety.md
+│   │   ├── code-quality.md
+│   │   ├── brain-usage.md
+│   │   └── (profile-specific rules)
+│   ├── skills/                  # Copied skills
+│   └── skill-profile.json       # Active skill list
+└── memory/
+    ├── MEMORY.md                # Main memory index
+    ├── brain.jsonl              # Automatic operation log (managed by hooks)
+    ├── debugging.md             # Debugging notes
+    ├── preferences.md           # Working preferences
+    └── (profile-specific memory files)
+```
+
+## Architecture
+
+```
+claude_forge/
+├── cli.py              # Main CLI + TUI menus (click + prompt-toolkit)
+├── config.py            # Global config (~/.agent-forge/config.json)
+├── scanner.py           # Project analysis (language, framework detection)
+├── analyzer.py          # AI analysis (OpenRouter API)
+├── generator.py         # Setup file generation
+├── targets.py           # Platform definitions (Claude/Codex/Antigravity)
+├── learner.py           # Learning system
+├── navigator.py         # Skill matching
+├── mapper.py            # Codemap generation
+├── context_manager.py   # Memory/context status
+├── sync.py              # Cross-project sync
+├── release.py           # Version/release management
+├── versioning.py        # Semver detection and bumping
+├── models.py            # OpenRouter model management
+├── tui.py               # Terminal UI (fullscreen menu)
+├── hooks/               # Bundled hook files
+│   ├── brain-sync.sh
+│   ├── session-start.sh
+│   ├── pre-compact.sh
+│   └── qa-gate.sh
+└── profiles/            # Profile system
+    ├── schema.py        # Pydantic models
+    ├── loader.py        # YAML profile loading
+    ├── applicator.py    # Profile application
+    ├── extractor.py     # Profile extraction from projects
+    └── *.yaml           # 19 profile templates
+```
+
+## Configuration
+
+Global config: `~/.agent-forge/config.json`
+
+```json
+{
+  "openrouter_api_key": "sk-or-...",
+  "default_model": "google/gemini-2.5-flash",
+  "default_target": "claude"
+}
+```
+
+## Requirements
+
+- Python 3.10+
+- Node.js 18+ (optional, for TUI launcher)
+
+## License
+
+MIT

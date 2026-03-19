@@ -1,1 +1,1 @@
-"""Profile system for Claude Forge."""
+"""Profile system for Agent Forge."""

@@ -1,0 +1,280 @@
+version: 1
+name: kotlin_android
+description: "Kotlin, Jetpack Compose, MVVM, Hilt ile Android uygulama"
+extends: base
+languages: [kotlin]
+frameworks: [jetpack-compose, hilt]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir Android gelistiricisisin.
+    Temiz, test edilebilir, modern Kotlin ve Jetpack Compose kodu yazarsin.
+    Her degisiklikte performans, Clean Architecture ve Android best practice'leri onceligindir.
+  project_overview: |
+    Bu bir Kotlin + Jetpack Compose tabanli modern Android uygulamasidir.
+    MVVM mimari deseni, Hilt dependency injection ve Kotlin Coroutines kullanilir.
+    Clean Architecture katmanlari ile moduler yapi hedeflenir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Kotlin 2.0+, Jetpack Compose, Hilt, Coroutines/Flow, Retrofit, Room, Navigation Compose"
+  coding_standards: |
+    - Kotlin idioms: `when`, `let`, `apply`, `also`, data class, sealed class kullan
+    - Nullable type'lari minimize et, `!!` operatoru YASAK (guvenli erisim `?.` kullan)
+    - Compose fonksiyonlari PascalCase: `UserProfile()`, `LoginScreen()`
+    - Compose state'i `remember` ve `mutableStateOf` ile yonet
+    - State hoisting: state'i yukari tasi, composable'lari stateless yap
+    - ViewModel'de `StateFlow` kullan, `LiveData` yerine (Compose uyumu)
+    - Repository interface'leri domain katmaninda, implementation data katmaninda
+    - Use case'ler tek sorumluluk: bir use case bir is yapar
+    - Suspend fonksiyonlar `Dispatchers.IO`'da calis, Main dispatcher sadece UI icin
+    - Dosya isimleri PascalCase: `UserProfileScreen.kt`, `AuthViewModel.kt`
+    - Package isimleri lowercase: `com.app.feature.auth`
+    - String resource'lari `strings.xml`'de tut, hardcode string YAZMA
+    - Preview fonksiyonu her composable icin tanimla (`@Preview`)
+  architecture: |
+    ```
+    app/src/main/java/com/app/
+    ├── di/                       # Hilt module tanimlari
+    │   ├── AppModule.kt          # Singleton scope
+    │   ├── NetworkModule.kt      # Retrofit, OkHttp
+    │   └── DatabaseModule.kt     # Room database
+    ├── ui/
+    │   ├── theme/                # Theme, Color, Typography
+    │   ├── navigation/           # NavHost, route tanimlari
+    │   ├── components/           # Paylasilabilen composable'lar
+    │   └── screens/
+    │       ├── home/
+    │       │   ├── HomeScreen.kt
+    │       │   └── HomeViewModel.kt
+    │       └── auth/
+    │           ├── LoginScreen.kt
+    │           └── AuthViewModel.kt
+    ├── domain/
+    │   ├── model/                # Domain entity'leri
+    │   ├── repository/           # Repository interface'leri
+    │   └── usecase/              # Use case class'lari
+    └── data/
+        ├── remote/
+        │   ├── api/              # Retrofit interface'leri
+        │   └── dto/              # API response DTO'lari
+        ├── local/
+        │   ├── dao/              # Room DAO'lari
+        │   └── entity/           # Room entity'leri
+        └── repository/           # Repository implementation
+    ```
+  hard_boundaries: |
+    - `!!` (not-null assertion) ASLA kullanma, `?.` veya `requireNotNull` kullan
+    - Presentation katmanindan direkt data source'a ERISME
+    - Domain katmaninda Android framework import'u OLMASIN (pure Kotlin)
+    - `GlobalScope.launch` KULLANMA, viewModelScope veya lifecycleScope kullan
+    - Hardcode string YAZMA, strings.xml kullan
+    - API key'leri source code'a KOYMA, BuildConfig veya local.properties kullan
+    - `Thread.sleep()` KULLANMA, `delay()` kullan
+  error_handling: |
+    - Sealed class ile Result pattern kullan
+    - Retrofit exception'lari repository'de yakala, domain-level hata don
+    - ViewModel'de hata state'i tut, UI'da SnackBar/Dialog ile goster
+    - Coroutine exception handler tanimla (CoroutineExceptionHandler)
+    - Crash reporting icin Firebase Crashlytics entegre et
+    - Ornek:
+      ```kotlin
+      // domain/model/Result.kt
+      sealed class Result<out T> {
+          data class Success<T>(val data: T) : Result<T>()
+          data class Error(val message: String, val cause: Throwable? = null) : Result<Nothing>()
+          data object Loading : Result<Nothing>()
+      }
+
+      // data/repository/UserRepositoryImpl.kt
+      class UserRepositoryImpl @Inject constructor(
+          private val api: UserApi,
+      ) : UserRepository {
+          override suspend fun getUser(id: String): Result<User> {
+              return try {
+                  val response = api.getUser(id)
+                  Result.Success(response.toDomain())
+              } catch (e: HttpException) {
+                  Result.Error("Kullanici bilgisi alinamadi: ${e.code()}")
+              } catch (e: IOException) {
+                  Result.Error("Internet baglantisi kontrol edin")
+              }
+          }
+      }
+      ```
+  test_command: "./gradlew test --info"
+  lint_command: "./gradlew ktlintCheck detekt"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.kt ]]; then
+        ktlint --format "$FILE_PATH" 2>/dev/null || true
+      fi
+
+rules:
+  - name: coroutines.md
+    content: |
+      ---
+      description: Kotlin Coroutines kullanim kurallari
+      ---
+      ## Coroutines Kurallari
+      - `GlobalScope.launch` KULLANMA, scope'lu coroutine kullan
+      - ViewModel'de `viewModelScope.launch`, Fragment/Activity'de `lifecycleScope.launch`
+      - I/O islemleri `withContext(Dispatchers.IO)` ile yap
+      - `Flow` ile reaktif veri akisi, `collect` ile dinle
+      - `StateFlow` UI state icin, `SharedFlow` one-shot event'ler icin
+      - Paralel islemler icin `async/await` veya `coroutineScope` kullan
+
+      ### Ornek
+      ```kotlin
+      // ViewModel
+      class UserViewModel @HiltViewModel @Inject constructor(
+          private val getUserUseCase: GetUserUseCase,
+      ) : ViewModel() {
+          private val _uiState = MutableStateFlow<UserUiState>(UserUiState.Loading)
+          val uiState: StateFlow<UserUiState> = _uiState.asStateFlow()
+
+          fun loadUser(id: String) {
+              viewModelScope.launch {
+                  _uiState.value = UserUiState.Loading
+                  when (val result = getUserUseCase(id)) {
+                      is Result.Success -> _uiState.value = UserUiState.Success(result.data)
+                      is Result.Error -> _uiState.value = UserUiState.Error(result.message)
+                  }
+              }
+          }
+      }
+      ```
+
+  - name: compose-patterns.md
+    content: |
+      ---
+      description: Jetpack Compose best practice'leri
+      ---
+      ## Compose Patterns
+      - State hoisting: state'i composable disina tasi, parametre olarak al
+      - Slot API pattern: icerik icin `@Composable () -> Unit` lambda al
+      - Side effect'ler icin `LaunchedEffect`, `DisposableEffect` kullan
+      - Modifier chain'ini dogru sirayla kullan (padding -> background -> padding)
+      - `derivedStateOf` ile gereksiz recomposition onle
+
+      ### Ornek
+      ```kotlin
+      // State hoisting pattern
+      @Composable
+      fun CounterScreen(viewModel: CounterViewModel = hiltViewModel()) {
+          val count by viewModel.count.collectAsStateWithLifecycle()
+          CounterContent(
+              count = count,
+              onIncrement = viewModel::increment,
+              onDecrement = viewModel::decrement,
+          )
+      }
+
+      @Composable
+      fun CounterContent(
+          count: Int,
+          onIncrement: () -> Unit,
+          onDecrement: () -> Unit,
+          modifier: Modifier = Modifier,
+      ) {
+          Column(modifier = modifier.padding(16.dp)) {
+              Text("Sayi: $count", style = MaterialTheme.typography.headlineMedium)
+              Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                  Button(onClick = onDecrement) { Text("-") }
+                  Button(onClick = onIncrement) { Text("+") }
+              }
+          }
+      }
+      ```
+
+  - name: dependency-injection.md
+    content: |
+      ---
+      description: Hilt dependency injection kurallari
+      ---
+      ## Hilt DI Kurallari
+      - Her ViewModel `@HiltViewModel` ile annotate et
+      - Module'lerde `@Provides` ile dependency sagla, `@Binds` ile interface bind et
+      - Scope'lari dogru kullan: `@Singleton`, `@ViewModelScoped`, `@ActivityScoped`
+      - Repository interface'i domain'de, implementation data'da tanimla
+      - Test'lerde `@TestInstallIn` ile mock module sagla
+
+      ### Ornek
+      ```kotlin
+      @Module
+      @InstallIn(SingletonComponent::class)
+      abstract class RepositoryModule {
+          @Binds
+          @Singleton
+          abstract fun bindUserRepository(
+              impl: UserRepositoryImpl,
+          ): UserRepository
+      }
+
+      @Module
+      @InstallIn(SingletonComponent::class)
+      object NetworkModule {
+          @Provides
+          @Singleton
+          fun provideRetrofit(): Retrofit {
+              return Retrofit.Builder()
+                  .baseUrl(BuildConfig.API_URL)
+                  .addConverterFactory(GsonConverterFactory.create())
+                  .build()
+          }
+      }
+      ```
+
+skills_include:
+  - tdd-workflow
+  - mobile-patterns
+  - kotlin-patterns
+  - compose-patterns
+  - clean-architecture
+  - android-patterns
+
+skills_exclude:
+  - "python-*"
+  - "golang-*"
+  - "rust-*"
+  - "swift-*"
+  - "flutter-*"
+  - "react-*"
+  - "vue-*"
+  - "django-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Katman Yapisi
+      UI (Compose) -> ViewModel -> UseCase -> Repository -> DataSource
+
+      ## Modul Yapisi
+      _(Multi-module ise modul listesi)_
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: screens.md
+    content: |
+      # Ekran Listesi
+
+      ## Ekranlar ve Navigation Route'lari
+      _(Her ekran ve NavHost route tanimlari)_
+
+      ## ViewModel'ler
+      _(Her ViewModel ve yonettigi state)_
+
+  - name: api-contracts.md
+    content: |
+      # API Sozlesmeleri
+
+      ## Endpoint Listesi
+      _(Backend API endpoint'leri)_
+
+      ## DTO Modelleri
+      _(Request/Response modelleri)_

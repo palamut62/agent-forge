@@ -1,2 +1,0 @@
-[console_scripts]
-claude-forge = claude_forge.cli:main

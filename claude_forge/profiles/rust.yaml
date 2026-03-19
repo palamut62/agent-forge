@@ -1,0 +1,260 @@
+version: 1
+name: rust
+description: "Rust, Cargo, tokio/actix ile sistem ve backend gelistirme"
+extends: base
+languages: [rust]
+frameworks: [tokio, actix-web]
+
+claude_md:
+  role: |
+    Sen bu projede calisan kidemli bir Rust gelistiricisisin.
+    Guvenli, performansli, idiomatik Rust kodu yazarsin.
+    Her degisiklikte memory safety, ownership kurallari ve zero-cost abstraction onceligindir.
+  project_overview: |
+    Bu bir Rust tabanli sistem/backend projesidir.
+    Ownership ve borrowing kurallarina uygun, memory-safe kod yazilir.
+    Async runtime olarak tokio, web framework olarak actix-web veya axum kullanilir.
+    (Proje ozelinde: bu alani projeye gore guncelle)
+  tech_stack: "Rust 1.77+, tokio, actix-web/axum, serde, sqlx, tracing, thiserror/anyhow"
+  coding_standards: |
+    - Clippy uyarilari sifir olmali: `#![deny(clippy::all, clippy::pedantic)]`
+    - `unsafe` bloklari SADECE gercekten gerektiginde, her biri SAFETY comment ile
+    - `unwrap()` uretim kodunda YASAK, `?` operatoru veya `expect("aciklama")` kullan
+    - `clone()` gereksiz kullanma, borrow tercih et (performans)
+    - Lifetime annotation'lari acik yaz, compiler'in cikarimina guvenme (karmasik durumlarda)
+    - Enum ile state machine pattern kullan
+    - `impl` bloklarini mantiksal olarak grupla (pub, private, trait impl)
+    - Module isimleri snake_case: `user_handler.rs`, `auth_service.rs`
+    - Type alias kullan: `type Result<T> = std::result::Result<T, AppError>`
+    - Builder pattern kullan karmasik struct initialization icin
+    - Trait'leri kucuk tut, composition over inheritance
+    - `#[derive]` macro'larini tutarli kullan: Debug, Clone, Serialize, Deserialize
+  architecture: |
+    ```
+    src/
+    ├── main.rs                   # Entry point, server setup
+    ├── lib.rs                    # Library root (re-exports)
+    ├── config.rs                 # Configuration (env vars)
+    ├── error.rs                  # AppError enum, From impl'leri
+    ├── routes/
+    │   ├── mod.rs                # Router config
+    │   └── user.rs               # User endpoint handler'lari
+    ├── services/
+    │   ├── mod.rs
+    │   └── user.rs               # Business logic
+    ├── repositories/
+    │   ├── mod.rs
+    │   └── user.rs               # Database islemleri (sqlx)
+    ├── models/
+    │   ├── mod.rs
+    │   ├── user.rs               # Domain modelleri
+    │   └── dto.rs                # Request/Response DTO'lari
+    └── middleware/
+        ├── mod.rs
+        └── auth.rs               # Authentication middleware
+    ```
+  hard_boundaries: |
+    - `unsafe` bloklari SAFETY comment olmadan YAZMA
+    - `unwrap()` uretim kodunda KULLANMA, `?` veya `expect` kullan
+    - `clone()` gereksiz KULLANMA, borrow tercih et
+    - `String` yerine `&str` kabul et (fonksiyon parametrelerinde)
+    - Deadlock riski: `Mutex` icinde async `.await` YAPMA (tokio::sync::Mutex kullan)
+    - `.env` ve credential dosyalarini COMMIT etme
+    - Cargo.lock'u binary projelerinde COMMIT et, library'lerde etme
+  error_handling: |
+    - `thiserror` ile custom error enum tanimla
+    - `anyhow` sadece application-level (main, test) kullan, library'de KULLANMA
+    - `?` operatoru ile error propagation yap
+    - `From` trait impl ile error donusumleri otomatik yap
+    - Handler'larda error'u HTTP response'a donustur (IntoResponse impl)
+    - Ornek:
+      ```rust
+      // src/error.rs
+      use thiserror::Error;
+
+      #[derive(Error, Debug)]
+      pub enum AppError {
+          #[error("Kayit bulunamadi: {0}")]
+          NotFound(String),
+
+          #[error("Yetkisiz erisim")]
+          Unauthorized,
+
+          #[error("Gecersiz veri: {0}")]
+          Validation(String),
+
+          #[error("Veritabani hatasi")]
+          Database(#[from] sqlx::Error),
+
+          #[error("Dahili sunucu hatasi")]
+          Internal(#[from] anyhow::Error),
+      }
+
+      impl IntoResponse for AppError {
+          fn into_response(self) -> Response {
+              let (status, message) = match &self {
+                  AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+                  AppError::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
+                  AppError::Validation(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+                  _ => (StatusCode::INTERNAL_SERVER_ERROR, "Sunucu hatasi".into()),
+              };
+              (status, Json(json!({ "error": message }))).into_response()
+          }
+      }
+      ```
+  test_command: "cargo test -- --nocapture"
+  lint_command: "cargo clippy -- -D warnings && cargo fmt --check"
+
+hooks:
+  - name: format.sh
+    event: PostToolUse
+    matcher: "Edit|Write"
+    command: |
+      if [[ "$FILE_PATH" == *.rs ]]; then
+        rustfmt "$FILE_PATH" 2>/dev/null || true
+        cargo clippy --quiet 2>/dev/null || true
+      fi
+
+rules:
+  - name: ownership-borrowing.md
+    content: |
+      ---
+      description: Rust ownership ve borrowing kurallari
+      ---
+      ## Ownership & Borrowing
+      - Fonksiyon parametrelerinde `&str` kabul et, `String` degil (flexibility)
+      - `&self` tercih et, `self` sadece consuming fonksiyonlar icin
+      - `clone()` son care, once borrow ile cozum ara
+      - Lifetime'lari acik yaz: `fn process<'a>(data: &'a str) -> &'a str`
+      - Move semantic'i anla: degisken move edildikten sonra KULLANILAMAZ
+
+      ### Ornek
+      ```rust
+      // YANLIS - gereksiz clone
+      fn greet(name: String) -> String {
+          format!("Merhaba, {}!", name)
+      }
+      let name = String::from("Umut");
+      greet(name.clone()); // gereksiz allocation
+
+      // DOGRU - borrow
+      fn greet(name: &str) -> String {
+          format!("Merhaba, {}!", name)
+      }
+      let name = String::from("Umut");
+      greet(&name); // zero-cost, clone yok
+      ```
+
+  - name: error-handling-rules.md
+    content: |
+      ---
+      description: Rust error handling kurallari
+      ---
+      ## Error Handling
+      - `unwrap()` YASAK, `?` operatoru kullan
+      - `expect("aciklama")` sadece gercekten imkansiz durumlarda
+      - `thiserror` ile typed error, `anyhow` sadece application-level
+      - `From` trait ile otomatik error donusumu
+      - `Result<T, E>` her fallible fonksiyonun donus tipi
+
+      ### Ornek
+      ```rust
+      // YANLIS
+      let file = File::open("config.toml").unwrap(); // panic riski!
+
+      // DOGRU
+      let file = File::open("config.toml")
+          .map_err(|e| AppError::Config(format!("config okunamadi: {e}")))?;
+
+      // Type alias ile temiz kod
+      pub type Result<T> = std::result::Result<T, AppError>;
+
+      pub async fn get_user(id: i64) -> Result<User> {
+          let user = sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", id)
+              .fetch_optional(&pool)
+              .await?
+              .ok_or(AppError::NotFound(format!("User {id}")))?;
+          Ok(user)
+      }
+      ```
+
+  - name: unsafe-rules.md
+    content: |
+      ---
+      description: Unsafe Rust kullanim kurallari
+      ---
+      ## Unsafe Kurallari
+      - `unsafe` SADECE su durumlarda kullan:
+        - FFI (C kutuphanesi cagirma)
+        - Performance-critical kod (profiling ile kanitlanmis)
+        - Raw pointer dereferencing (zorunlu durumlarda)
+      - Her `unsafe` blokuna SAFETY comment yaz
+      - `unsafe` fonksiyonu yaziyorsan, precondition'lari dokumante et
+      - Mumkunse safe wrapper yaz, unsafe'i ic detay olarak gizle
+
+      ### Ornek
+      ```rust
+      /// Verilen pointer'dan slice olusturur.
+      ///
+      /// # Safety
+      /// - `ptr` gecerli ve aligned olmali
+      /// - `len` elemandan fazla okuma yapilmamali
+      /// - Slice lifetime'i boyunca ptr gecerli kalmali
+      unsafe fn slice_from_raw<'a>(ptr: *const u8, len: usize) -> &'a [u8] {
+          // SAFETY: caller precondition'lari garanti eder
+          std::slice::from_raw_parts(ptr, len)
+      }
+      ```
+
+skills_include:
+  - tdd-workflow
+  - security-review
+  - rust-patterns
+  - systems-programming
+  - backend-patterns
+  - docker-patterns
+
+skills_exclude:
+  - "python-*"
+  - "kotlin-*"
+  - "swift-*"
+  - "golang-*"
+  - "flutter-*"
+  - "react-*"
+  - "vue-*"
+  - "django-*"
+  - "springboot-*"
+
+memory_templates:
+  - name: architecture.md
+    content: |
+      # Mimari Kararlar
+
+      ## Crate Yapisi
+      _(Workspace veya tek crate yapisi)_
+
+      ## Katmanlar
+      Handler -> Service -> Repository -> Database
+
+      ## Kararlar
+      _(Proje ilerledikce buraya eklenir)_
+
+  - name: api-contracts.md
+    content: |
+      # API Sozlesmeleri
+
+      ## Endpoint Listesi
+      _(Route tanimlari ve handler'lar)_
+
+      ## DTO'lar
+      _(Serde Serialize/Deserialize struct'lari)_
+
+  - name: error-types.md
+    content: |
+      # Hata Tipleri
+
+      ## AppError Variants
+      _(Tanimli hata cesitleri ve HTTP status code eslesmeleri)_
+
+      ## Error Chain
+      _(Hangi hata tiplerinin birbirine donustugu)_

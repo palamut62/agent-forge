@@ -1,4 +1,4 @@
-"""Claude Forge CLI -- AI-powered Claude Code project setup."""
+"""Agent Forge CLI -- multi-target AI assistant setup and management."""
 
 import click
 import os
@@ -8,12 +8,13 @@ from rich.console import Console
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 from rich.table import Table
+from rich.align import Align
 
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 import json
 
-from .config import load_config, save_config, get_api_key
+from .config import CONFIG_DIR, load_config, save_config, get_api_key
 from .models import fetch_models, filter_models, select_model
 from .scanner import scan_project, scan_available_skills
 from .analyzer import analyze_project, display_plan
@@ -28,6 +29,8 @@ from .navigator import build_registry, match_skills, display_skill_analysis
 from .mapper import write_codemap
 from .context_manager import display_context_status, display_compact_preview
 from .sync import export_project, import_project, diff_projects, display_diff
+from .targets import TARGETS, get_target_home, get_target_platform, normalize_target
+from .tui import MenuOption, fullscreen_menu
 
 console = Console()
 
@@ -43,8 +46,8 @@ BANNER = r"""
 """
 
 MAIN_MENU = [
-    ("1", "New Project",        "Create a new project folder and set up Claude Code"),
-    ("2", "Init Existing",      "Set up Claude Code in an existing project"),
+    ("1", "New Project",        "Create a new project folder and set up an AI coding assistant"),
+    ("2", "Init Existing",      "Set up an AI coding assistant in an existing project"),
     ("3", "Scan Project",       "Check a project for missing components"),
     ("4", "Release & Version",  "Version bump, quality check, push, release"),
     ("5", "Learning System",    "Record lessons, view & apply rules"),
@@ -53,15 +56,61 @@ MAIN_MENU = [
     ("8", "Profiles",           "Manage project profiles"),
     ("9", "Map & Context",      "Codemap, memory management"),
     ("s", "Sync",               "Cross-project setup sync"),
+    ("t", "Target Platform",    "Choose Claude, Codex, or Antigravity"),
     ("0", "Settings",           "API key, default model, config"),
     ("h", "Help",               "Show usage guide and examples"),
-    ("q", "Quit",               "Exit Claude Forge"),
+    ("q", "Quit",               "Exit Agent Forge"),
 ]
 
+HOME_MENU = [
+    ("1", "New Project",        "Create a new project and bootstrap assistant setup"),
+    ("2", "Init Existing",      "Add assistant setup to an existing project"),
+    ("t", "Choose Target",      "Switch between Claude Code, Codex, and Antigravity"),
+    ("0", "Settings",           "Set API key, default model, and defaults"),
+    ("a", "All Tools",          "Open advanced tools"),
+    ("h", "Help",               "See usage examples and project structure"),
+    ("q", "Quit",               "Exit Agent Forge"),
+]
 
-def show_menu(items: list[tuple], title: str = "Main Menu") -> str:
+INTRO_MENU = [
+    ("c", "Continue", "Open quick start"),
+    ("t", "Change Target", "Pick Claude Code, Codex, or Antigravity"),
+    ("h", "Help", "Open usage guide"),
+    ("q", "Quit", "Exit Agent Forge"),
+]
+
+def show_menu(
+    items: list[tuple],
+    title: str = "Main Menu",
+    subtitle: str = "",
+    cancel_value: str = "q",
+    initial_key: str | None = None,
+) -> str:
     """Display a menu and return the choice."""
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        options = [
+            MenuOption(
+                key=key,
+                title=name,
+                description=desc,
+                meta=f"Shortcut: {key}",
+            )
+            for key, name, desc in items
+        ]
+        result = fullscreen_menu(
+            title=title,
+            subtitle=subtitle or "Use arrow keys to move, Enter to select.",
+            options=options,
+            footer="Up/Down move  Type to filter  Ctrl+L clear  Enter select  Esc back",
+            initial_key=initial_key,
+        )
+        return result or cancel_value
+
     console.print()
+    if subtitle:
+        console.print(Panel(subtitle, title=title, border_style="bright_blue"))
+    else:
+        console.print(Panel(Align.center(title), border_style="bright_blue"))
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(style="bold cyan", width=4)
     table.add_column(style="bold", width=20)
@@ -70,8 +119,7 @@ def show_menu(items: list[tuple], title: str = "Main Menu") -> str:
         table.add_row(f"[{key}]", name, desc)
     console.print(table)
     console.print()
-    return Prompt.ask("Select", default="q")
-
+    return Prompt.ask("Select", default=cancel_value)
 
 def ask_path(prompt_text: str, must_exist: bool = False) -> str:
     """Ask user for a path."""
@@ -85,11 +133,108 @@ def ask_path(prompt_text: str, must_exist: bool = False) -> str:
         return str(path)
 
 
+def render_target_table(config: dict) -> None:
+    """Display supported target platforms."""
+    default_target = normalize_target(config.get("default_target", "claude"))
+    table = Table(title="Target Platforms", border_style="magenta")
+    table.add_column("Key", style="bold cyan", width=14)
+    table.add_column("Platform", style="bold")
+    table.add_column("Guide File", style="green", width=18)
+    table.add_column("Config Dir", style="yellow", width=18)
+    table.add_column("Default", justify="center", width=10)
+
+    for key in ("claude", "codex", "antigravity"):
+        target = get_target_platform(key)
+        table.add_row(
+            key,
+            target.label,
+            target.guide_file,
+            target.config_dir,
+            "[green]YES[/green]" if key == default_target else "",
+        )
+    console.print(table)
+
+
+def ask_target(config: dict, prompt_text: str = "Target assistant", allow_default: bool = True) -> str:
+    """Ask which assistant platform to configure."""
+    default_target = normalize_target(config.get("default_target", "claude"))
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        options = []
+        for key in ("claude", "codex", "antigravity"):
+            target = get_target_platform(key)
+            meta = f"Guide: {target.guide_file}  Config: {target.config_dir}"
+            if key == default_target:
+                meta += "  Default target"
+            options.append(
+                MenuOption(
+                    key=key,
+                    title=target.label,
+                    description=f"Configure project output for {target.label}.",
+                    meta=meta,
+                )
+            )
+        result = fullscreen_menu(
+            title="Target Platform",
+            subtitle=prompt_text,
+            options=options,
+            footer="Up/Down move  Type to filter  Ctrl+L clear  Enter confirm  Esc back",
+            initial_key=default_target if allow_default else "claude",
+        )
+        if result:
+            return normalize_target(result)
+        if allow_default:
+            return default_target
+
+    render_target_table(config)
+    default_value = default_target if allow_default else None
+    choice = Prompt.ask(
+        prompt_text,
+        choices=["claude", "codex", "antigravity"],
+        default=default_value,
+    )
+    return normalize_target(choice)
+
+
+def target_status_line(config: dict) -> str:
+    """Short status line used in menus."""
+    target = get_target_platform(config.get("default_target"))
+    return (
+        f"Active target: [cyan]{target.label}[/cyan]\n"
+        f"Guide file: [green]{target.guide_file}[/green]\n"
+        f"Config dir: [yellow]{target.config_dir}[/yellow]\n"
+        f"Model: [cyan]{config.get('default_model', '(not set)')}[/cyan]"
+    )
+
+
+def home_subtitle(config: dict) -> str:
+    """Landing screen copy shown before the full tool menu."""
+    target = get_target_platform(config.get("default_target"))
+    return (
+        "Quick start for Claude Code, Codex, and Antigravity.\n"
+        f"Current target: {target.label}  |  "
+        f"Guide: {target.guide_file}  |  "
+        f"Config: {target.config_dir}  |  "
+        f"Model: {config.get('default_model', '(not set)')}\n"
+        "Choose a starting action. Advanced tools are under All Tools."
+    )
+
+
+def intro_subtitle(config: dict) -> str:
+    """Short product intro shown before quick-start menu."""
+    target = get_target_platform(config.get("default_target"))
+    return (
+        "Set up and manage Claude Code, Codex, and Antigravity workflows.\n"
+        f"Default target: {target.label}   Default model: {config.get('default_model', '(not set)')}"
+    )
+
+
 # --- Interactive Flows ---
 
 def flow_new_project(config: dict) -> None:
-    """Create a new project folder + Claude Code setup."""
+    """Create a new project folder + target assistant setup."""
     console.print(Panel("Create New Project", border_style="green"))
+    target = ask_target(config, prompt_text="Select target platform")
+    target_platform = get_target_platform(target)
 
     # Step 1: Where?
     console.print("[bold]Step 1/4 -- Project location[/bold]")
@@ -122,25 +267,40 @@ def flow_new_project(config: dict) -> None:
             # Create .gitignore
             gitignore = project_path / ".gitignore"
             if not gitignore.exists():
-                gitignore.write_text("node_modules/\n__pycache__/\n.venv/\nvenv/\ndist/\nbuild/\n*.pyc\n.env\n.claude/settings.local.json\n", encoding="utf-8")
+                gitignore.write_text(
+                    f"node_modules/\n__pycache__/\n.venv/\nvenv/\ndist/\nbuild/\n*.pyc\n.env\n{target_platform.config_dir}/{target_platform.local_settings_file}\n",
+                    encoding="utf-8",
+                )
             console.print("  [green][OK] Git initialized[/green]")
     else:
         console.print("  [dim]Git already initialized[/dim]")
 
     # Step 4: AI setup
-    console.print("\n[bold]Step 4/4 -- Claude Code setup (AI-powered)[/bold]")
-    _run_init(str(project_path), config)
+    console.print(f"\n[bold]Step 4/4 -- {target_platform.label} setup (AI-powered)[/bold]")
+    _run_init(str(project_path), config, target=target)
 
 
 def flow_init_existing(config: dict) -> None:
-    """Set up Claude Code in an existing project."""
+    """Set up a target assistant in an existing project."""
     console.print(Panel("Init Existing Project", border_style="cyan"))
     project_path = ask_path("Project path", must_exist=True)
-    _run_init(project_path, config)
+    target = ask_target(config, prompt_text="Select target platform")
+    _run_init(project_path, config, target=target)
 
 
-def _run_init(project_path: str, config: dict) -> None:
+def flow_target_platform(config: dict) -> None:
+    """Choose the active target platform."""
+    console.print(Panel("Target Platform", border_style="magenta"))
+    selected = ask_target(config, prompt_text="Set default target platform")
+    config["default_target"] = selected
+    save_config(config)
+    console.print(f"[green]Default target set to: {get_target_platform(selected).label}[/green]")
+
+
+def _run_init(project_path: str, config: dict, target: str | None = None) -> None:
     """Shared init logic."""
+    resolved_target = normalize_target(target or config.get("default_target"))
+    target_platform = get_target_platform(resolved_target)
     api_key = get_api_key(config)
     if not api_key:
         console.print("[red]API key not set. Go to Settings first.[/red]")
@@ -160,18 +320,19 @@ def _run_init(project_path: str, config: dict) -> None:
             console.print(f"[red]Failed: {e}[/red]")
             return
 
-    console.print(f"\n  Model: [cyan]{use_model}[/cyan]")
+    console.print(f"\n  Target: [cyan]{target_platform.label}[/cyan]")
+    console.print(f"  Model: [cyan]{use_model}[/cyan]")
 
     # 1. Scan
     console.print("\n[bold]1/4 -- Scanning project...[/bold]")
-    project_info = scan_project(project_path)
+    project_info = scan_project(project_path, target=resolved_target)
     console.print(f"  Languages: {', '.join(project_info['languages']) or 'unknown'}")
     console.print(f"  Frameworks: {', '.join(project_info['frameworks']) or 'unknown'}")
     console.print(f"  Files: {project_info['file_count']}")
 
     # 2. Skills
     console.print("\n[bold]2/4 -- Scanning skill inventory...[/bold]")
-    skills_info = scan_available_skills(config.get("claude_home"))
+    skills_info = scan_available_skills(get_target_home(config, resolved_target), target=resolved_target)
     total = len(skills_info["global_skills"]) + len(skills_info["plugin_commands"]) + len(skills_info["plugin_agents"])
     console.print(f"  [green]Total: {total} skills/agents/commands[/green]")
 
@@ -190,12 +351,17 @@ def _run_init(project_path: str, config: dict) -> None:
 
     # 4. Generate
     console.print("\n[bold]4/4 -- Generating files...[/bold]")
-    generate_project(project_path, plan)
+    generate_project(
+        project_path,
+        plan,
+        target=resolved_target,
+        target_home=get_target_home(config, resolved_target),
+    )
 
     # Apply lessons
     if load_lessons():
         console.print("\n[bold]Applying learned lessons...[/bold]")
-        count = apply_lessons_to_project(project_path)
+        count = apply_lessons_to_project(project_path, target=resolved_target)
         if count:
             console.print(f"  [green]{count} lesson rules applied.[/green]")
 
@@ -206,17 +372,18 @@ def flow_scan() -> None:
     """Scan project for missing components."""
     console.print(Panel("Scan Project", border_style="cyan"))
     project_path = ask_path("Project path", must_exist=True)
-    project_info = scan_project(project_path)
+    target = ask_target(load_config(), prompt_text="Which target should be checked")
+    project_info = scan_project(project_path, target=target)
 
     console.print(f"\n  Project: [bold]{project_info['name']}[/bold]")
     console.print(f"  Languages: {', '.join(project_info['languages']) or 'unknown'}")
     console.print(f"  Frameworks: {', '.join(project_info['frameworks']) or 'unknown'}")
     console.print(f"  Files: {project_info['file_count']}")
 
-    console.print("\n[bold]Claude Code Status:[/bold]")
+    console.print(f"\n[bold]{project_info['target_label']} Status:[/bold]")
     checks = [
-        ("CLAUDE.md", project_info["has_claude_md"]),
-        (".claude/ directory", project_info["has_claude"]),
+        (project_info["guide_file"], project_info["has_guide"]),
+        (f"{project_info['config_dir']}/ directory", project_info["has_agent_dir"]),
         ("memory/ directory", project_info["has_memory"]),
         ("Git repo", project_info["has_git"]),
     ]
@@ -245,7 +412,7 @@ def flow_release() -> None:
 
     while True:
         console.print(Panel("Release & Versioning", border_style="green"))
-        choice = show_menu(RELEASE_MENU, "Release Menu")
+        choice = show_menu(RELEASE_MENU, "Release Menu", cancel_value="b")
 
         if choice == "b":
             break
@@ -278,7 +445,7 @@ def flow_learning() -> None:
 
     while True:
         console.print(Panel("Learning System", border_style="yellow"))
-        choice = show_menu(LEARN_MENU, "Learning Menu")
+        choice = show_menu(LEARN_MENU, "Learning Menu", cancel_value="b")
 
         if choice == "b":
             break
@@ -316,12 +483,13 @@ def flow_skills_models(config: dict) -> None:
 
     while True:
         console.print(Panel("Skills & Models", border_style="magenta"))
-        choice = show_menu(SM_MENU, "Skills & Models")
+        choice = show_menu(SM_MENU, "Skills & Models", cancel_value="b")
 
         if choice == "b":
             break
         elif choice == "1":
-            skills_info = scan_available_skills(config.get("claude_home"))
+            target = ask_target(config, prompt_text="Select target platform")
+            skills_info = scan_available_skills(get_target_home(config, target), target=target)
             console.print(Panel("Skill Inventory", border_style="cyan"))
             if skills_info["global_skills"]:
                 console.print("\n[bold]Global Skills:[/bold]")
@@ -330,8 +498,9 @@ def flow_skills_models(config: dict) -> None:
             console.print(f"\n  [dim]{len(skills_info['plugin_commands'])} plugin commands, {len(skills_info['plugin_agents'])} plugin agents[/dim]")
         elif choice == "2":
             project_path_input = ask_path("Project path", must_exist=True)
-            project_info = scan_project(project_path_input)
-            registry = build_registry(config.get("claude_home"))
+            target = ask_target(config, prompt_text="Select target platform")
+            project_info = scan_project(project_path_input, target=target)
+            registry = build_registry(get_target_home(config, target), target=target)
             result = match_skills(registry, project_info["languages"], project_info["frameworks"])
             display_skill_analysis(result, project_info["name"])
         elif choice == "3":
@@ -364,7 +533,7 @@ def flow_profiles(config: dict) -> None:
     ]
     while True:
         console.print(Panel("Profile Management", border_style="magenta"))
-        choice = show_menu(PROFILE_MENU, "Profiles")
+        choice = show_menu(PROFILE_MENU, "Profiles", cancel_value="b")
 
         if choice == "b":
             break
@@ -382,16 +551,23 @@ def flow_profiles(config: dict) -> None:
             console.print("Profiles: " + ", ".join(f"[cyan]{n}[/cyan]" for n in names))
             profile_name = Prompt.ask("Profile name")
             project_path = ask_path("Project path", must_exist=True)
+            target = ask_target(config, prompt_text="Apply profile for which target")
             try:
                 profile = load_profile(profile_name)
-                apply_profile(profile, Path(project_path))
+                apply_profile(
+                    profile,
+                    Path(project_path),
+                    target=target,
+                    target_home=get_target_home(config, target),
+                )
             except FileNotFoundError as e:
                 console.print(f"[red]{e}[/red]")
         elif choice == "3":
             project_path = ask_path("Project path", must_exist=True)
             name = Prompt.ask("Profile name")
-            profile = extract_profile(Path(project_path), name)
-            out_dir = Path.home() / ".claude-forge" / "profiles"
+            target = ask_target(config, prompt_text="Extract profile from which target")
+            profile = extract_profile(Path(project_path), name, target=target)
+            out_dir = CONFIG_DIR / "profiles"
             out_dir.mkdir(parents=True, exist_ok=True)
             out_file = out_dir / f"{name}.yaml"
             save_profile_yaml(profile, out_file)
@@ -411,7 +587,7 @@ def flow_map_context() -> None:
     ]
     while True:
         console.print(Panel("Map & Context", border_style="blue"))
-        choice = show_menu(MAP_MENU, "Map & Context")
+        choice = show_menu(MAP_MENU, "Map & Context", cancel_value="b")
 
         if choice == "b":
             break
@@ -420,7 +596,8 @@ def flow_map_context() -> None:
             write_codemap(Path(project_path))
         elif choice == "2":
             project_path = ask_path("Project path", must_exist=True)
-            display_context_status(Path(project_path))
+            target = ask_target(load_config(), prompt_text="Show context for which target")
+            display_context_status(Path(project_path), target=target)
         elif choice == "3":
             project_path = ask_path("Project path", must_exist=True)
             display_compact_preview(Path(project_path))
@@ -439,27 +616,30 @@ def flow_sync() -> None:
     ]
     while True:
         console.print(Panel("Cross-Project Sync", border_style="green"))
-        choice = show_menu(SYNC_MENU, "Sync")
+        choice = show_menu(SYNC_MENU, "Sync", cancel_value="b")
 
         if choice == "b":
             break
         elif choice == "1":
             project_path = ask_path("Project path", must_exist=True)
-            data = export_project(Path(project_path))
-            out = Path(project_path) / "claude-forge-export.json"
+            target = ask_target(load_config(), prompt_text="Export setup for which target")
+            data = export_project(Path(project_path), target=target)
+            out = Path(project_path) / "agent-forge-export.json"
             out.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
             console.print(f"[green]Exported: {out}[/green]")
         elif choice == "2":
             project_path = ask_path("Target project path", must_exist=True)
             export_file = ask_path("Export JSON file path", must_exist=True)
-            stats = import_project(Path(project_path), Path(export_file))
+            target = ask_target(load_config(), prompt_text="Import setup for which target")
+            stats = import_project(Path(project_path), Path(export_file), target=target)
             console.print(f"\n[green]Imported: {stats['rules_imported']} rules, {stats['hooks_imported']} hooks[/green]")
             if stats["skipped"]:
                 console.print(f"[dim]Skipped: {stats['skipped']}[/dim]")
         elif choice == "3":
             p1 = ask_path("Project 1 path", must_exist=True)
             p2 = ask_path("Project 2 path", must_exist=True)
-            diff = diff_projects(Path(p1), Path(p2))
+            target = ask_target(load_config(), prompt_text="Compare which target setup")
+            diff = diff_projects(Path(p1), Path(p2), target=target)
             display_diff(diff, Path(p1).name, Path(p2).name)
 
         console.print("\n[dim]Press Enter to continue...[/dim]")
@@ -472,11 +652,14 @@ def flow_settings(config: dict) -> None:
 
     current_key = config.get("openrouter_api_key", "")
     current_model = config.get("default_model", "")
+    current_target = get_target_platform(config.get("default_target"))
     masked = f"...{current_key[-8:]}" if len(current_key) > 8 else "(none)"
 
     console.print(f"  API key: [dim]{masked}[/dim]")
     console.print(f"  Default model: [cyan]{current_model or '(none)'}[/cyan]")
-    console.print(f"  Claude home: [dim]{config.get('claude_home', '')}[/dim]")
+    console.print(f"  Default target: [cyan]{current_target.label}[/cyan]")
+    for key in TARGETS:
+        console.print(f"  {key} home: [dim]{get_target_home(config, key)}[/dim]")
     console.print()
 
     if Confirm.ask("Change API key?", default=False):
@@ -492,123 +675,144 @@ def flow_settings(config: dict) -> None:
             if selected:
                 config["default_model"] = selected
 
+    if Confirm.ask("Change default target?", default=False):
+        config["default_target"] = ask_target(config, prompt_text="Set default target platform")
+
     save_config(config)
     console.print("[green]Settings saved![/green]")
 
 
 def flow_help() -> None:
     """Show help page with usage guide and examples."""
-    console.print(Panel("Claude Forge -- Help & Usage Guide", border_style="cyan"))
+    console.print(Panel("Agent Forge -- Help & Usage Guide", border_style="cyan"))
 
     console.print("""
 [bold cyan]== HIZLI BASLANGIC ==[/bold cyan]
-  1. [cyan]claude-forge[/cyan] ile interaktif menu ac
-  2. [cyan][1] New Project[/cyan] ile sifirdan proje olustur
-  3. [cyan][2] Init Existing[/cyan] ile mevcut projeye Claude Code ekle
+  1. [cyan]agent-forge[/cyan] ile acilis menusu
+  2. [cyan]Continue[/cyan] -> [cyan]New Project[/cyan] veya [cyan]Init Existing[/cyan]
+  3. Hedef platformu [cyan]Change Target[/cyan] ile sec (Claude Code / Codex / Antigravity)
 
-[bold cyan]== HIZLI MOD ==[/bold cyan]
-  [cyan]claude-forge C:\\path\\to\\project[/cyan]         Direkt init (menu atlar)
-  [cyan]claude-forge C:\\path\\to\\project -m model[/cyan] Belirli model ile init
+[bold cyan]== KOMUT KULLANIMI ==[/bold cyan]
+  [cyan]agent-forge[/cyan]
+    Interaktif mod (TUI/menu)
 
-[bold cyan]== PROJE TEMPLATE'LERI ==[/bold cyan]
-  Hazir sablonlardan hizli proje olustur:
-  [cyan]python C:\\Users\\umuti\\Desktop\\pal_project\\templates\\create_project.py <sablon> <isim>[/cyan]
+  [cyan]agent-forge C:\\path\\to\\project[/cyan]
+    Proje yoluyla hizli kurulum akisi
 
-  Mevcut sablonlar:
-    [green]fastapi-template[/green]  FastAPI + uvicorn + pydantic-settings + loguru
-    [green]telegram-bot[/green]      python-telegram-bot + loguru
-    [green]data-pipeline[/green]     ETL pipeline (extract/transform/load) + httpx
-    [green]cli-tool[/green]          typer + rich CLI uygulamasi
+  [cyan]agent-forge C:\\path\\to\\project -t codex[/cyan]
+    Dogrudan Codex hedefiyle kurulum
 
-  Ornek: [dim]python create_project.py fastapi-template my-api "API projem"[/dim]
+  [cyan]agent-forge --flow settings[/cyan]
+    Belirli bir akis ekranini direkt ac
 
-[bold cyan]== OLUSTURULAN YAPILAR ==[/bold cyan]
-  project/
-  +-- CLAUDE.md                  Proje rehberi (AI tarafindan olusturulur)
-  +-- .claude/
-  |   +-- settings.json          Hook ve izin ayarlari
-  |   +-- rules/                 Kod kalite kurallari
-  |   +-- skills/                Ozel slash komutlari
-  +-- tests/                     Test dosyalari
-  +-- .env.example               Ortam degiskenleri sablonu
+[bold cyan]== TUI KISAYOLLAR ==[/bold cyan]
+  [cyan]Up/Down[/cyan]       Menu gez
+  [cyan]Enter[/cyan]         Secili islemi calistir
+  [cyan]Type[/cyan]          Listeyi filtrele
+  [cyan]/[/cyan]             Global hizli komut paleti (ornek: /settings, /scan)
+  [cyan]Esc / Sol[/cyan]     Geri don
+  [cyan]Backspace[/cyan]     Filtreyi sil, bossa geri don
+  [cyan]Ctrl+L[/cyan]        Filtre temizle
+  [cyan]?[/cyan]             Kisayol yardimi
+  [cyan]Ctrl+C[/cyan]        Cikis
 
-[bold cyan]== GLOBAL SISTEM (Her Terminalden Aktif) ==[/bold cyan]
-  [bold]CLAUDE.md[/bold] (C:\\Users\\umuti\\CLAUDE.md)
-    Tum projelerde gecerli global kurallar:
-    - Kod standartlari (Python 3.12+, type hints, ruff)
-    - Test kurallari (pytest, %80 coverage)
-    - Mimari kararlar (FastAPI, httpx, pydantic-settings)
-    - Git kurallari (Turkce commit, branch naming)
+[bold cyan]== ANA MENULER ==[/bold cyan]
+  [cyan]Quick Start[/cyan]      Yeni proje, mevcut projeye kurulum, ayarlar
+  [cyan]All Tools[/cyan]        Scan, Release, Learning, Build, Profiles, Sync
+  [cyan]Target Platform[/cyan]  Varsayilan hedef platform degisimi
 
-  [bold]Hooks[/bold] (~/.claude/settings.json)
-    Otomatik tetiklenen islemler:
-    [green]PreToolUse/Bash[/green]   git commit oncesi ruff check + format kontrolu
-    [green]PostToolUse/Edit[/green]  .py dosyasi duzenlendikten sonra ruff auto-fix
-    [green]Notification[/green]      Uzun islemler bitince bildirim
+[bold cyan]== URETILEN DOSYALAR ==[/bold cyan]
+  Rehber dosyasi: [cyan]CLAUDE.md / AGENTS.md / ANTIGRAVITY.md[/cyan]
+  Konfigurasyon: [cyan].claude/[/cyan] [cyan].codex/[/cyan] [cyan].antigravity/[/cyan]
+  Ayrica: rules/, skills/, tests/, .env.example
 
-  [bold]MCP Sunuculari[/bold] (~/.claude/.mcp.json)
-    [green]filesystem[/green]  deneembos, pal_project, .openclaw dizinlerine erisim
-    [green]memory[/green]      Gelismis hafiza yonetimi
-    [green]github[/green]      PR, issue, repo islemleri dogrudan Claude'dan
+[bold cyan]== KONFIGURASYON ==[/bold cyan]
+  [cyan]~/.agent-forge/config.json[/cyan]   API key, default model, default target
+  [cyan]~/.agent-forge/lessons.json[/cyan]  Ogrenme sistemi kurallari
 
-  [bold]Memory Sistemi[/bold] (~/.claude/projects/.../memory/)
-    Farkli oturumlarda bilgi tasir:
-    [green]user[/green]       Kullanici profili ve tercihleri
-    [green]feedback[/green]   "Bunu yapma/yap" gibi geri bildirimler
-    [green]project[/green]    Devam eden isler ve kararlar
-    [green]reference[/green]  Harici kaynaklara referanslar
-
-  [bold]Araclar[/bold]
-    [green]ruff[/green]  Python linter + formatter (otomatik hook ile)
-    [green]jq[/green]    JSON parser (hook'lar icin gerekli)
-
-[bold cyan]== MENU REFERANSI ==[/bold cyan]
-  [cyan][1][/cyan] New Project       Klasor + git init + AI setup
-  [cyan][2][/cyan] Init Existing     Mevcut projeye Claude Code ekle
-  [cyan][3][/cyan] Scan Project      Eksik bilesenleri kontrol et
-  [cyan][4][/cyan] Release & Version Versiyon, kalite, push, release
-  [cyan][5][/cyan] Learning System   Hata kaydet, kural olustur, uygula
-  [cyan][6][/cyan] Build Executable  PyInstaller ile .exe olustur
-  [cyan][7][/cyan] Skills & Models   Skill envanter, AI model degistir
-  [cyan][8][/cyan] Settings          API key, model, config ayarlari
-
-[bold cyan]== OGRENME SISTEMI ==[/bold cyan]
-  1. Hata yaptin (main'e push, test unutma vs.)
-  2. [cyan][5] > Record Lesson[/cyan] ile hatani ve kuralini kaydet
-  3. Sonraki init'te kurallar otomatik uygulanir
-  4. Dersler global: ~/.claude-forge/lessons.json
-
-[bold cyan]== VERSIYON YONETIMI ==[/bold cyan]
-  - pyproject.toml / package.json / Cargo.toml'dan okur
-  - Git commit'lere gore onerilen bump:
-       [dim]feat!: breaking  ->  MAJOR (1.0.0 -> 2.0.0)
-       feat: feature    ->  MINOR (1.0.0 -> 1.1.0)
-       fix: bug fix     ->  PATCH (1.0.0 -> 1.0.1)[/dim]
-
-[bold cyan]== CONFIG DOSYALARI ==[/bold cyan]
-  ~/.claude-forge/config.json      API key, default model
-  ~/.claude-forge/lessons.json     Ogrenilen dersler (global)
-  ~/.claude/settings.json          Hook'lar, izinler, pluginler
-  ~/.claude/.mcp.json              MCP sunucu ayarlari
-  C:\\Users\\umuti\\CLAUDE.md         Global proje kurallari
+[bold cyan]== NOT ==[/bold cyan]
+  Windows'ta Python ve npm ikisi de yukluysa, npm surumu icin gerekirse
+  [cyan]agent-forge.cmd[/cyan] komutunu kullanin.
+  Geriye uyumluluk icin [cyan]claude-forge[/cyan] alias'i da calismaya devam eder.
+  Python CLI'yi dogrudan acmak icin [cyan]agent-forge-py[/cyan] kullanin.
 """)
 
 
 # --- Main Entry Point ---
 
+
+def run_flow(flow: str, config: dict) -> bool:
+    """Run a single named flow and return True if handled."""
+    handlers = {
+        "new-project": lambda: flow_new_project(config),
+        "init-existing": lambda: flow_init_existing(config),
+        "scan-project": flow_scan,
+        "release": flow_release,
+        "learning": flow_learning,
+        "build": flow_build,
+        "skills-models": lambda: flow_skills_models(config),
+        "profiles": lambda: flow_profiles(config),
+        "map-context": flow_map_context,
+        "sync": flow_sync,
+        "target-platform": lambda: flow_target_platform(config),
+        "settings": lambda: flow_settings(config),
+        "help": flow_help,
+    }
+    fn = handlers.get(flow)
+    if not fn:
+        return False
+    fn()
+    return True
+
 @click.command()
 @click.argument("project_path", required=False, type=click.Path())
 @click.option("--model", "-m", help="Override default model")
 @click.option("--profile", "-p", help="Apply a profile instead of AI analysis")
-def main(project_path, model, profile):
-    """Claude Forge -- AI-powered Claude Code project setup tool.
+@click.option("--target", "-t", help="Target assistant: claude, codex, antigravity")
+@click.option(
+    "--flow",
+    type=click.Choice(
+        [
+            "new-project",
+            "init-existing",
+            "scan-project",
+            "release",
+            "learning",
+            "build",
+            "skills-models",
+            "profiles",
+            "map-context",
+            "sync",
+            "target-platform",
+            "settings",
+            "help",
+        ],
+        case_sensitive=False,
+    ),
+    help="Run a specific flow directly",
+)
+def main(project_path, model, profile, target, flow):
+    """Agent Forge -- multi-target AI assistant setup and operations tool.
 
     Run without arguments for interactive mode.
-    Run with a path for quick init: claude-forge C:\\path\\to\\project
+    Run with a path for quick init: agent-forge C:\\path\\to\\project
     """
     config = load_config()
+    resolved_target = normalize_target(target or config.get("default_target"))
 
-    # Quick mode: claude-forge <path>
+    if model:
+        config["default_model"] = model
+        save_config(config)
+
+    if target:
+        config["default_target"] = resolved_target
+        save_config(config)
+
+    if flow:
+        run_flow(flow.lower(), config)
+        return
+
+    # Quick mode: agent-forge <path>
     if project_path:
         path = Path(project_path)
         if not path.exists():
@@ -616,49 +820,98 @@ def main(project_path, model, profile):
                 path.mkdir(parents=True, exist_ok=True)
             else:
                 raise SystemExit(0)
+        if not target:
+            console.print(Panel("Select Target Platform", border_style="magenta"))
+            resolved_target = ask_target(config, prompt_text="Which platform should be configured", allow_default=False)
         if profile:
             try:
                 prof = load_profile(profile)
-                apply_profile(prof, path)
+                apply_profile(
+                    prof,
+                    path,
+                    target=resolved_target,
+                    target_home=get_target_home(config, resolved_target),
+                )
             except FileNotFoundError as e:
                 console.print(f"[red]{e}[/red]")
             return
-        if model:
-            config["default_model"] = model
-        _run_init(str(path.resolve()), config)
+        _run_init(str(path.resolve()), config, target=resolved_target)
         return
 
     # Interactive mode
-    console.print(BANNER)
-    console.print(f"  [dim]Model: {config.get('default_model', '(not set)')}[/dim]")
-    console.print(f"  [dim]Lessons: {len(load_lessons())} learned[/dim]")
+    console.print(Panel("Agent Forge", border_style="blue"))
+    console.print(f"[dim]Target:[/dim] {get_target_platform(config.get('default_target')).label}")
+    console.print(f"[dim]Model:[/dim] {config.get('default_model', '(not set)')}")
+    console.print(f"[dim]Lessons:[/dim] {len(load_lessons())} learned")
+
+    intro_choice = show_menu(
+        INTRO_MENU,
+        title="Agent Forge",
+        subtitle=intro_subtitle(config),
+        cancel_value="q",
+        initial_key="c",
+    )
+    if intro_choice == "q":
+        console.print("\n[dim]Bye![/dim]")
+        return
+    if intro_choice == "t":
+        flow_target_platform(config)
+    elif intro_choice == "h":
+        flow_help()
 
     while True:
-        choice = show_menu(MAIN_MENU)
+        choice = show_menu(
+            HOME_MENU,
+            title="Quick Start",
+            subtitle=home_subtitle(config),
+            cancel_value="q",
+            initial_key="1",
+        )
 
         try:
             if choice == "1":
                 flow_new_project(config)
             elif choice == "2":
                 flow_init_existing(config)
-            elif choice == "3":
-                flow_scan()
-            elif choice == "4":
-                flow_release()
-            elif choice == "5":
-                flow_learning()
-            elif choice == "6":
-                flow_build()
-            elif choice == "7":
-                flow_skills_models(config)
-            elif choice == "8":
-                flow_profiles(config)
-            elif choice == "9":
-                flow_map_context()
-            elif choice == "s":
-                flow_sync()
+            elif choice == "t":
+                flow_target_platform(config)
             elif choice == "0":
                 flow_settings(config)
+            elif choice == "a":
+                full_choice = show_menu(
+                    MAIN_MENU,
+                    title="All Tools",
+                    subtitle=target_status_line(config),
+                    cancel_value="b",
+                )
+                if full_choice == "1":
+                    flow_new_project(config)
+                elif full_choice == "2":
+                    flow_init_existing(config)
+                elif full_choice == "3":
+                    flow_scan()
+                elif full_choice == "4":
+                    flow_release()
+                elif full_choice == "5":
+                    flow_learning()
+                elif full_choice == "6":
+                    flow_build()
+                elif full_choice == "7":
+                    flow_skills_models(config)
+                elif full_choice == "8":
+                    flow_profiles(config)
+                elif full_choice == "9":
+                    flow_map_context()
+                elif full_choice == "s":
+                    flow_sync()
+                elif full_choice == "t":
+                    flow_target_platform(config)
+                elif full_choice == "0":
+                    flow_settings(config)
+                elif full_choice == "h":
+                    flow_help()
+                elif full_choice == "b":
+                    continue
             elif choice == "h":
                 flow_help()
             elif choice == "q":
@@ -676,3 +929,4 @@ def main(project_path, model, profile):
 
 if __name__ == "__main__":
     main()
+
